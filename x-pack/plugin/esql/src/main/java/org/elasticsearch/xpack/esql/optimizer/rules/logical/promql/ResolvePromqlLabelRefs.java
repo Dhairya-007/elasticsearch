@@ -487,12 +487,14 @@ public final class ResolvePromqlLabelRefs extends ParameterizedRule<LogicalPlan,
         }
 
         /**
-         * The initial aggregate collapses the source per series. A label it keys by, or can push down, is a dimension column;
-         * one the source lacks is dropped from the keys. The source reads its metadata without the labels it leaves out.
+         * The initial aggregate collapses the source per series. A label it keys by, or carries while it keeps one row per
+         * series, is a field column; one it carries beside its metadata is a dimension the metadata keeps. One the source lacks
+         * is dropped from the keys. The source reads its metadata without the labels it leaves out.
          */
         private LogicalPlan resolveCollapse(TimeSeriesAggregate node, List<UnresolvedPromqlLabelRef> needs) {
             Alias value = (Alias) node.aggregates().getFirst();
-            Keys keys = keys(grain(node.groupings(), value), needs, true);
+            Grain grain = grain(node.groupings(), value);
+            Keys keys = keys(grain, needs, true);
             LogicalPlan raw = node.child();
             LogicalPlan child = raw;
             Source source = node.source();
@@ -524,7 +526,9 @@ public final class ResolvePromqlLabelRefs extends ParameterizedRule<LogicalPlan,
                 }
             }
             for (UnresolvedPromqlLabelRef label : keys.labels()) {
-                Attribute column = PromqlLabels.getLabel(raw, label.name());
+                Attribute column = grain.perSeries() || grain.labels().stream().anyMatch(label::reads)
+                    ? PromqlLabels.getField(raw, label.name())
+                    : PromqlLabels.getLabel(raw, label.name());
                 if (column != null) {
                     groupKeys.add(column);
                 }
