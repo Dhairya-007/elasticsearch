@@ -757,7 +757,7 @@ public class PromqlPlanBinaryOperatorTests extends AbstractPromqlPlanOptimizerTe
         assertThat(plan.output().stream().map(Attribute::name).toList(), containsInAnyOrder("result", "step", "cluster"));
     }
 
-    /** Shape 7a: nested WITHOUT over WITHOUT — typed metadata only. */
+    /** Shape 7a: nested WITHOUT over WITHOUT - typed metadata only. */
     public void testNestedWithoutOverWithoutPlans() {
         assumeTrue("PromQL vector matching is required", EsqlCapabilities.Cap.PROMQL_VECTOR_MATCHING_V0.isEnabled());
         assumeTrue("nested without needs typed metadata", typedTimeSeriesMetadata());
@@ -765,7 +765,7 @@ public class PromqlPlanBinaryOperatorTests extends AbstractPromqlPlanOptimizerTe
         assertThat(plan.output().stream().map(Attribute::name).toList(), containsInAnyOrder("result", "step", "_timeseries"));
     }
 
-    /** Shape 7b: topk over without — typed metadata only. */
+    /** Shape 7b: topk over without - typed metadata only. */
     public void testTopkOverWithoutPlans() {
         assumeTrue("PromQL vector matching is required", EsqlCapabilities.Cap.PROMQL_VECTOR_MATCHING_V0.isEnabled());
         assumeTrue("topk over without needs typed metadata", typedTimeSeriesMetadata());
@@ -870,7 +870,7 @@ public class PromqlPlanBinaryOperatorTests extends AbstractPromqlPlanOptimizerTe
 
     /**
      * Unmatched {@code +} over a prior {@code on(...)} match joins by default matching: the match result is concrete
-     * ({@code cluster}), the raw selector is opaque. Same {@code joinKey} path as concrete×opaque without nesting —
+     * ({@code cluster}), the raw selector is opaque. Same {@code joinKey} path as concrete x opaque without nesting -
      * packs a metadata signature on the opaque side and named keys on the concrete side.
      */
     public void testVectorMatchComposedWithOpaqueOperandJoins() {
@@ -977,7 +977,7 @@ public class PromqlPlanBinaryOperatorTests extends AbstractPromqlPlanOptimizerTe
 
     /**
      * Join by default, fold as the optimisation: same-metric pending binaries share a frame and fold; explicit
-     * {@code group_left} and {@code label_replace}×vector (a relabel leaves the frame) always join.
+     * {@code group_left} and {@code label_replace} x vector (a relabel leaves the frame) always join.
      */
     public void testSameMetricFoldsLabelReplaceAndGroupLeftJoin() {
         assumeTrue("PromQL vector matching is required", EsqlCapabilities.Cap.PROMQL_VECTOR_MATCHING_V0.isEnabled());
@@ -992,7 +992,7 @@ public class PromqlPlanBinaryOperatorTests extends AbstractPromqlPlanOptimizerTe
         var relabel = planPromql(
             "PROMQL index=k8s step=5m result=(label_replace(network.eth0.tx, \"dst\", \"$1\", \"pod\", \"(.+)\") + network.eth0.tx)"
         );
-        assertThat("label_replace × vector always joins", relabel.collect(HashJoin.class).isEmpty(), equalTo(false));
+        assertThat("label_replace x vector always joins", relabel.collect(HashJoin.class).isEmpty(), equalTo(false));
     }
 
     public void testGroupLabelMissingFromBuildDoesNotLeakFromProbe() {
@@ -1329,7 +1329,7 @@ public class PromqlPlanBinaryOperatorTests extends AbstractPromqlPlanOptimizerTe
     }
 
     /**
-     * Labelless nested across-series ({@code max(sum by)/min(sum by)}) join on step — the promcheck nested_agg bucket.
+     * Labelless nested across-series ({@code max(sum by)/min(sum by)}) join on step - the promcheck nested_agg bucket.
      */
     public void testNestedAcrossSeriesBinaryJoins() {
         var plan = planPrometheusLayout(
@@ -1360,7 +1360,7 @@ public class PromqlPlanBinaryOperatorTests extends AbstractPromqlPlanOptimizerTe
     }
 
     /**
-     * Aggregated×raw, nested across-series×source, and {@code scalar()}×labeled join
+     * Aggregated x raw, nested across-series x source, and {@code scalar()} x labeled join
      * ({@link EsqlCapabilities.Cap#PROMQL_BINARY_INDEPENDENT_JOIN}). Opaque reductions stay rejected at verify/bind.
      */
     public void testAsymmetricBinaryOperandsJoin() {
@@ -1391,7 +1391,7 @@ public class PromqlPlanBinaryOperatorTests extends AbstractPromqlPlanOptimizerTe
         }
     }
 
-    /** WITHOUT-grouped operands join, including asymmetric raw × without (promcheck without_bin). */
+    /** WITHOUT-grouped operands join, including asymmetric raw x without (promcheck without_bin). */
     public void testWithoutBinaryJoins() {
         for (String promql : List.of(
             "sum without (job) (node_memory_MemAvailable_bytes) - sum without (job) (node_memory_MemTotal_bytes)",
@@ -1420,7 +1420,7 @@ public class PromqlPlanBinaryOperatorTests extends AbstractPromqlPlanOptimizerTe
     }
 
     /**
-     * {@code by (value)} collides with the sample value column — rejected like {@code by (step)} (promcheck plan_dump).
+     * {@code by (value)} collides with the sample value column - rejected like {@code by (step)} (promcheck plan_dump).
      */
     public void testByValueLabelRejectedAsCollision() {
         EsField name = dimension("__name__");
