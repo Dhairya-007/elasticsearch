@@ -117,7 +117,7 @@ public class FunctionalTimeSeriesCcsIT extends ESRestTestCase {
         Map<String, Object> response = entityAsMap(client().performRequest(request));
         assertEquals(response.toString(), false, response.get("is_partial"));
         assertEquals(
-            List.of(Map.of("name", "result", "type", "double"), Map.of("name", "_timeseries", "type", "_timeseries")),
+            List.of(Map.of("name", "result", "type", "double"), Map.of("name", "_timeseries", "type", "keyword")),
             response.get("columns")
         );
         List<?> rows = (List<?>) response.get("values");

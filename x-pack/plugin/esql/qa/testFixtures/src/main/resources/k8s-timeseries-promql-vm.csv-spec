@@ -1062,9 +1062,10 @@ vector_match_matrix_and
 required_capability: promql_command_v0
 required_capability: promql_vector_matching_v0
 required_capability: promql_enable_timeseries_type
+required_capability: fn_json_extract
 PROMQL index=k8s step=10m r=(network.eth0.tx and on (cluster, pod) network.eth0.rx)
 | WHERE step == "2024-05-10T00:10:00.000Z"
-| EVAL cluster = TS_GET(_timeseries, "cluster"), pod = TS_GET(_timeseries, "pod")
+| EVAL cluster = JSON_EXTRACT(_timeseries, "cluster"), pod = JSON_EXTRACT(_timeseries, "pod")
 | WHERE cluster == "prod"
 | KEEP r, cluster, pod, step
 | SORT pod;
