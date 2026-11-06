@@ -2689,7 +2689,8 @@ public class EsqlCapabilities {
 
         /**
          * Initial support for simple binary comparisons in PromQL.
-         * Only top-level comparisons are supported where the right-hand side is a scalar.
+         * Unmatched comparisons require a scalar literal on the right-hand side; nesting under
+         * aggregations / {@code label_replace} / reductions is supported.
          */
         PROMQL_BINARY_COMPARISON_V0,
 
@@ -2774,6 +2775,11 @@ public class EsqlCapabilities {
         FIX_PROMQL_WITHOUT_OUTPUT,
 
         /**
+         * PromQL WITHOUT drops the metric name while retaining every other grouping label, including for WITHOUT ().
+         */
+        FIX_PROMQL_WITHOUT_METRIC_NAME,
+
+        /**
          * PromQL groups by a non-dimension label under {@code by(...)} also when an inner {@code without(...)} carries it, as it
          * does directly over the source.
          */
@@ -2806,6 +2812,15 @@ public class EsqlCapabilities {
          * Gates csv-spec coverage of those shapes.
          */
         PROMQL_BINARY_INDEPENDENT_JOIN(PROMQL_COMMAND_V0.isEnabled()),
+
+        /**
+         * Under typed {@code _timeseries}, a vector match's signature slot leaves the named key labels out and a side
+         * without metadata packs the empty signature, so an opaque operand matches a concrete or promoted-label sibling
+         * under {@code ignoring(...)} / default matching the way Prometheus signatures do, and a raw source serves two
+         * metadata views that neither contain each other ({@code a * ignoring(pod) group_left(region) b}).
+         * Gates csv-spec coverage of those shapes.
+         */
+        PROMQL_BINARY_OPAQUE_SIGNATURE_MATCH(PROMQL_COMMAND_V0.isEnabled()),
 
         /**
          * Support for the {@code TS_COLLAPSE} pipe command, which collapses PromQL results
