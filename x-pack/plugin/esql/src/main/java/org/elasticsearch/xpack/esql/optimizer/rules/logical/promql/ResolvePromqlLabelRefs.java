@@ -60,7 +60,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Predicate;
 
 /**
  * Binds the label references ({@link UnresolvedPromqlLabelRef}) of a translated PromQL plan to columns, right after
@@ -96,6 +95,50 @@ public final class ResolvePromqlLabelRefs extends ParameterizedRule<LogicalPlan,
         return expression.children().stream().anyMatch(ResolvePromqlLabelRefs::hasAcrossSeriesAggregate);
     }
 
+    /** The declared grouping is a semantic dependency even when no parent reads its output. */
+    record Grain(@Nullable UnresolvedPromqlLabelRef metadata, List<UnresolvedPromqlLabelRef> labels, boolean perSeries) {}
+
+    /** A source needs at most one common metadata view plus explicitly named columns. */
+    record Keys(@Nullable UnresolvedPromqlLabelRef metadata, List<UnresolvedPromqlLabelRef> labels) {
+        List<UnresolvedPromqlLabelRef> all() {
+            return metadata == null ? labels : Pass.concat(List.of(metadata), labels);
+        }
+    }
+
+    /**
+     * Pure transfer function for a grouping boundary. Initial per-series aggregation may carry any source field;
+     * other aggregates may carry only labels determined by their declared grain. Typed metadata demands combine
+     * by intersection of exclusions. Keyword metadata must already have the exact requested view.
+     */
+    static Keys selectKeys(Grain grain, List<UnresolvedPromqlLabelRef> needs, boolean initial, boolean typed) {
+        boolean perSeries = initial && grain.perSeries();
+        UnresolvedPromqlLabelRef metadata = grain.metadata();
+        boolean grainRead = metadata != null && needs.stream().anyMatch(metadata::reads);
+        var labels = new ArrayList<UnresolvedPromqlLabelRef>();
+        for (UnresolvedPromqlLabelRef need : needs) {
+            if (need.isMetadata()) {
+                if (perSeries && (metadata == null || metadata.reads(need) == false)) {
+                    if (metadata == null) {
+                        metadata = need;
+                    } else if (typed) {
+                        var common = new LinkedHashSet<>(metadata.unset());
+                        common.retainAll(need.unset());
+                        metadata = metadata.againstSource(common);
+                    } else if (grainRead == false && metadata == grain.metadata()) {
+                        metadata = need;
+                    } else {
+                        throw Pass.unsupported(need);
+                    }
+                }
+            } else if (grain.labels().stream().noneMatch(need::reads)
+                && (perSeries || (grain.metadata() != null && grain.metadata().unset().contains(need.name()) == false))) {
+                    Pass.addIfAbsent(labels, need);
+                }
+        }
+        grain.labels().forEach(label -> Pass.addIfAbsent(labels, label));
+        return new Keys(metadata, List.copyOf(labels));
+    }
+
     /** One resolution over the plan. {@code typed} when every participating node reads {@code _timeseries} as typed metadata. */
     private static final class Pass {
         /** Null when the pass only traces metadata. */
@@ -114,6 +157,7 @@ public final class ResolvePromqlLabelRefs extends ParameterizedRule<LogicalPlan,
             this.typed = typed;
         }
 
+        /** Every metadata reference followed, by id: one reference read in several places follows once. */
         private final Map<NameId, UnresolvedPromqlLabelRef> followed = new HashMap<>();
 
         /** Followed plan plus the unset of its time-series metadata (composed toward the source). */
@@ -334,7 +378,7 @@ public final class ResolvePromqlLabelRefs extends ParameterizedRule<LogicalPlan,
         /** Rebuilds {@code node}, binding its own references, so that it carries every column of {@code needs} it can. */
         private LogicalPlan resolve(LogicalPlan node, List<UnresolvedPromqlLabelRef> needs) {
             // A constant operand (vector(1)) reads its match key raw: what it lacks binds to null like anywhere else.
-            if (isRaw(node) && node.anyMatch(raw -> references(raw).isEmpty() == false) == false) {
+            if (node.children().isEmpty()) {
                 return node;
             }
             if (node instanceof Project project && project.child() instanceof UnpackDims unpack) {
@@ -359,11 +403,6 @@ public final class ResolvePromqlLabelRefs extends ParameterizedRule<LogicalPlan,
                 return resolveUnary(unary, needs);
             }
             throw new IllegalStateException("unexpected node in a translated PromQL plan [" + node.nodeName() + "]");
-        }
-
-        /** A plan below every aggregation: the source with its filters. Every label there is a dimension or absent. */
-        private boolean isRaw(LogicalPlan node) {
-            return node.anyMatch(p -> p instanceof Aggregate || p instanceof HashJoin) == false;
         }
 
         /**
@@ -422,7 +461,7 @@ public final class ResolvePromqlLabelRefs extends ParameterizedRule<LogicalPlan,
                 if (projection instanceof Alias exposed && exposed.child() instanceof UnresolvedPromqlLabelRef ref) {
                     Attribute column = binding.column(ref);
                     if (column.id().equals(exposed.id()) == false || column.name().equals(exposed.name()) == false) {
-                        // PathTrace may name the column _timeseries$...; rename to the declared public name for KEEP/API.
+                        // Tracing may name the column _timeseries$...; rename to the declared public name for KEEP/API.
                         Alias alias = new Alias(column.source(), exposed.name(), column, exposed.id());
                         aliases.add(alias);
                         column = alias.toAttribute();
@@ -500,30 +539,23 @@ public final class ResolvePromqlLabelRefs extends ParameterizedRule<LogicalPlan,
             Source source = node.source();
 
             var groupKeys = new ArrayList<NamedExpression>();
-            if (typed && keys.metadata().isEmpty() == false) {
-                // The source reads typed metadata leaving its labels out, as it reads the keyword column a
-                // TimeSeriesWithout lowers to: the loader resolves the label names against the mapping either way.
-                var metadata = new ArrayList<TimeSeriesMetadataAttribute>();
-                for (UnresolvedPromqlLabelRef key : keys.metadata()) {
-                    var read = TimeSeriesMetadataAttribute.create(source, key.unset(), context.minimumVersion());
-                    metadata.add(read);
-                    groupKeys.add(key.unset().isEmpty() ? read : new Alias(source, key.name(), read));
-                }
+            UnresolvedPromqlLabelRef metadata = keys.metadata();
+            if (metadata != null && typed) {
+                var read = TimeSeriesMetadataAttribute.create(source, metadata.unset(), context.minimumVersion());
+                groupKeys.add(metadata.unset().isEmpty() ? read : new Alias(source, metadata.name(), read));
                 child = child.transformUp(EsRelation.class, relation -> {
                     var attributes = new ArrayList<>(relation.output());
                     attributes.removeIf(attribute -> attribute instanceof TimeSeriesMetadataAttribute);
-                    attributes.addAll(metadata);
+                    attributes.add(read);
                     return relation.withAttributes(attributes);
                 });
-            } else {
-                for (UnresolvedPromqlLabelRef key : keys.metadata()) {
-                    List<Expression> fields = key.unset().stream().<Expression>map(label -> {
-                        Attribute resolved = PromqlLabels.getLabel(raw.output(), label);
-                        // TimeSeriesWithout reads the names of the labels it leaves out, present at the source or not
-                        return resolved != null ? resolved : new ReferenceAttribute(Source.EMPTY, label, DataType.KEYWORD);
-                    }).toList();
-                    groupKeys.add(new Alias(source, key.name(), new TimeSeriesWithout(source, fields)));
-                }
+            } else if (metadata != null) {
+                List<Expression> fields = metadata.unset().stream().<Expression>map(label -> {
+                    Attribute resolved = PromqlLabels.getLabel(raw.output(), label);
+                    // The loader must see exclusions even when their labels are absent from this source.
+                    return resolved != null ? resolved : new ReferenceAttribute(Source.EMPTY, label, DataType.KEYWORD);
+                }).toList();
+                groupKeys.add(new Alias(source, metadata.name(), new TimeSeriesWithout(source, fields)));
             }
             for (UnresolvedPromqlLabelRef label : keys.labels()) {
                 Attribute column = PromqlLabels.getField(raw, label.name());
@@ -551,7 +583,7 @@ public final class ResolvePromqlLabelRefs extends ParameterizedRule<LogicalPlan,
                 groupings.add(seriesKey);
             }
             List<NamedExpression> aggregates = placeKeys(node.aggregates(), groupKeys.stream().map(NamedExpression::toAttribute).toList());
-            if (keys.declared() || bySeries) {
+            if (keys.metadata() != null || keys.labels().isEmpty() == false || bySeries) {
                 aggregates = wrapValues(aggregates);
             }
             List<Attribute> output = Expressions.asAttributes(aggregates);
@@ -583,12 +615,12 @@ public final class ResolvePromqlLabelRefs extends ParameterizedRule<LogicalPlan,
             return null;
         }
 
-        /** A emitAggregate without packed dimensions: it keys by named labels only. */
+        /** An aggregate without packed dimensions: it keys by named labels only. */
         private LogicalPlan resolveAggregate(Aggregate node, List<UnresolvedPromqlLabelRef> needs) {
             Alias value = (Alias) node.aggregates().getFirst();
             Keys keys = keys(grain(node.groupings(), value), needs, false);
             List<UnresolvedPromqlLabelRef> own = references(node);
-            LogicalPlan child = resolve(node.child(), concat(keys.pushed(), own));
+            LogicalPlan child = resolve(node.child(), concat(keys.all(), own));
             Binding binding = bind(node, child, own, keys.all());
             List<Attribute> columns = keys.all().stream().map(binding::column).toList();
             var groupings = new ArrayList<Expression>();
@@ -600,7 +632,7 @@ public final class ResolvePromqlLabelRefs extends ParameterizedRule<LogicalPlan,
         }
 
         /**
-         * A emitAggregate over packed dimensions ({@link PackDims} under the {@link Aggregate}, {@link UnpackDims} and a projection
+         * An aggregate over packed dimensions ({@link PackDims} under the {@link Aggregate}, {@link UnpackDims} and a projection
          * above it): the keys are the dimensions it packs. A label it cannot get from its input is absent from every series
          * and packs as null.
          */
@@ -610,7 +642,7 @@ public final class ResolvePromqlLabelRefs extends ParameterizedRule<LogicalPlan,
             Alias value = (Alias) aggregate.aggregates().getFirst();
             Keys keys = keys(grain(pack.dims(), value), needs, false);
             List<UnresolvedPromqlLabelRef> own = concat(references(pack), references(aggregate));
-            LogicalPlan child = resolve(pack.child(), concat(keys.pushed(), own));
+            LogicalPlan child = resolve(pack.child(), concat(keys.all(), own));
             Binding binding = bind(pack, child, own, keys.all());
             List<Attribute> dims = keys.all().stream().map(binding::column).toList();
             PackDims packed = new PackDims(pack.source(), binding.plan(), dims, pack.packed(), pack.emptyAsAbsent());
@@ -638,14 +670,7 @@ public final class ResolvePromqlLabelRefs extends ParameterizedRule<LogicalPlan,
 
         // -- keys --
 
-        /**
-         * What an aggregate keeps one row per: its metadata, which determines every label it does not leave out, and its
-         * promoted keys, which determine only themselves. {@code perSeries} when its value aggregates nothing across series,
-         * so each group is one input row.
-         */
-        private record Grain(@Nullable UnresolvedPromqlLabelRef metadata, List<UnresolvedPromqlLabelRef> labels, boolean perSeries) {}
-
-        private Grain grain(List<? extends Expression> keyExpressions, Alias value) {
+        private static Grain grain(List<? extends Expression> keyExpressions, Alias value) {
             UnresolvedPromqlLabelRef metadata = null;
             var labels = new ArrayList<UnresolvedPromqlLabelRef>();
             for (Expression key : keyExpressions) {
@@ -660,76 +685,15 @@ public final class ResolvePromqlLabelRefs extends ParameterizedRule<LogicalPlan,
             return new Grain(metadata, labels, hasAcrossSeriesAggregate(value.child()) == false);
         }
 
-        /**
-         * The keys of an aggregate: its metadata, then the labels pushed down through it, then its own labels.
-         *
-         * @param pushed what the aggregate needs of its input
-         * @param declared whether the aggregate keys by anything, present at the source or not
-         */
-        private record Keys(
-            List<UnresolvedPromqlLabelRef> metadata,
-            List<UnresolvedPromqlLabelRef> labels,
-            List<UnresolvedPromqlLabelRef> pushed,
-            boolean declared
-        ) {
-            List<UnresolvedPromqlLabelRef> all() {
-                return concat(metadata, labels);
-            }
-        }
-
-        /**
-         * A need rides along an aggregate when the aggregate's grain determines it. The initial aggregate of a series-preserving
-         * operator keeps one row per series, which determines every label and all metadata; it reads one metadata at most.
-         */
         private Keys keys(Grain grain, List<UnresolvedPromqlLabelRef> needs, boolean initial) {
-            boolean perSeries = initial && grain.perSeries();
-            var metadata = new ArrayList<UnresolvedPromqlLabelRef>();
-            if (grain.metadata() != null) {
-                metadata.add(grain.metadata());
+            Keys keys = selectKeys(grain, needs, initial, typed);
+            if (keys.metadata() != null) {
+                unsetByName.putIfAbsent(keys.metadata().name(), keys.metadata().unset());
             }
-            // Whether anything above reads the aggregate's own metadata; one row per series keys by it for nothing else.
-            boolean grainRead = grain.metadata() != null && needs.stream().anyMatch(grain.metadata()::reads);
-            var carried = new ArrayList<UnresolvedPromqlLabelRef>();
-            for (UnresolvedPromqlLabelRef need : needs) {
-                if (need.isMetadata()) {
-                    if (perSeries && metadata.stream().noneMatch(need::reads)) {
-                        if (metadata.isEmpty()) {
-                            metadata.add(need);
-                        } else if (typed) {
-                            // the source reads the finest metadata needed; a reader of a coarser one leaves labels out of it
-                            int coarser = indexOf(metadata, read -> read.unset().containsAll(need.unset()));
-                            if (coarser >= 0) {
-                                metadata.set(coarser, need);
-                            } else if (metadata.stream().noneMatch(read -> need.unset().containsAll(read.unset()))) {
-                                // neither view derives from the other (a join key under ignoring(pod) and a group_left result
-                                // leaving region out): the source reads what both leave out, and each reader derives its own
-                                UnresolvedPromqlLabelRef read = metadata.getFirst();
-                                var common = new LinkedHashSet<>(read.unset());
-                                common.retainAll(need.unset());
-                                UnresolvedPromqlLabelRef finest = read.againstSource(common);
-                                unsetByName.putIfAbsent(finest.name(), finest.unset());
-                                metadata.set(0, finest);
-                            }
-                        } else if (grainRead == false && metadata.size() == 1 && metadata.getFirst() == grain.metadata()) {
-                            // Keyword _timeseries cannot derive one view from another, but nothing reads the aggregate's own
-                            // view: the source reads the one needed instead.
-                            metadata.set(0, need);
-                        } else {
-                            // Keyword _timeseries cannot derive a second view; require typed metadata.
-                            throw unsupported(need);
-                        }
-                    }
-                } else if (grain.labels().stream().noneMatch(need::reads)
-                    && (perSeries || (grain.metadata() != null && grain.metadata().unset().contains(need.name()) == false))) {
-                        addIfAbsent(carried, need);
-                    }
-            }
-            var labels = new ArrayList<>(carried);
-            grain.labels().forEach(label -> addIfAbsent(labels, label));
-            return new Keys(metadata, labels, concat(metadata, labels), metadata.isEmpty() == false || labels.isEmpty() == false);
+            return keys;
         }
 
-        private VerificationException unsupported(UnresolvedPromqlLabelRef ref) {
+        private static VerificationException unsupported(UnresolvedPromqlLabelRef ref) {
             return new VerificationException(
                 List.of(Failure.fail(ref, "leaving labels out of _timeseries requires typed time-series metadata [{}]", ref.sourceText()))
             );
@@ -741,20 +705,15 @@ public final class ResolvePromqlLabelRefs extends ParameterizedRule<LogicalPlan,
         private record Binding(LogicalPlan plan, Map<String, Attribute> byName) {
             /**
              * Rewrites {@code node}'s references into references to their columns. An attribute the node took from its input
-             * while that input still read references is unresolved too; it now refers to the input's column with its id, or
-             * with its name when it lost the id ({@link Alias#toAttribute()} of an unresolved alias).
+             * while that input still read references is unresolved too; Alias.toAttribute preserves its id.
              */
             LogicalPlan apply(LogicalPlan node) {
                 var byId = new HashMap<NameId, Attribute>();
-                var byExactName = new HashMap<String, Attribute>();
-                plan.output().forEach(column -> {
-                    byId.put(column.id(), column);
-                    byExactName.put(column.name(), column);
-                });
+                plan.output().forEach(column -> byId.put(column.id(), column));
                 return node.transformExpressionsOnly(Attribute.class, attribute -> {
                     Attribute column = attribute instanceof UnresolvedPromqlLabelRef ref ? byName.get(ref.name())
                         : attribute.resolved() ? null
-                        : byId.getOrDefault(attribute.id(), byExactName.get(attribute.name()));
+                        : byId.get(attribute.id());
                     return column != null ? column : attribute;
                 });
             }
@@ -793,74 +752,49 @@ public final class ResolvePromqlLabelRefs extends ParameterizedRule<LogicalPlan,
                 if (byName.containsKey(ref.name())) {
                     continue;
                 }
-                Attribute column = column(child.output(), ref);
-                if (column == null && ref.isMetadata() && typed == false) {
-                    throw unsupported(ref);
-                }
-                if (column == null && ref.isMetadata()) {
-                    // typed metadata the input carries a finer form of: leave the extra labels out with ts_unset
-                    Attribute input = finerMetadata(child.output(), ref.unset());
-                    if (input == null) {
-                        throw unsupported(ref);
-                    }
-                    var labels = new LinkedHashSet<>(ref.unset());
-                    labels.removeAll(unsetByName.get(input.name()));
-                    UnresolvedPromqlLabelRef read = ownByName.get(ref.name());
-                    Alias metadata = new Alias(
-                        ref.source(),
-                        ref.name(),
-                        unset(ref.source(), input, labels),
-                        read != null ? declared.getOrDefault(read.id(), read.id()) : new NameId()
-                    );
-                    nulls.add(metadata);
-                    column = metadata.toAttribute();
-                }
-                if (column == null && typed && VectorBinaryOperator.EMPTY_SIGNATURE_KEY.equals(ref.name())) {
-                    // the signature slot of an operand without metadata: the empty label set, which an opaque sibling's
-                    // view equals once it has no label left outside the named key slots
+                Expression expression = value(child.output(), ref);
+                Attribute column;
+                if (expression instanceof Attribute attribute) {
+                    column = attribute;
+                } else {
                     UnresolvedPromqlLabelRef read = ownByName.get(ref.name());
                     NameId id = read != null ? declared.getOrDefault(read.id(), read.id()) : new NameId();
-                    Alias empty = new Alias(
-                        ref.source(),
-                        ref.name(),
-                        new ToTimeSeries(ref.source(), Literal.keyword(ref.source(), "{}")),
-                        id
-                    );
-                    nulls.add(empty);
-                    column = empty.toAttribute();
-                }
-                if (column == null && ref.isMetadata() == false) {
-                    // Opaque metadata holds the label: materialize it with ts_get (label_replace/join, on(...), by(...)).
-                    // Keyword metadata cannot read one label out; binding it to null would match series that have it.
-                    if (typed == false && holdsInMetadata(child.output(), ref.name())) {
-                        throw unsupported(ref);
-                    }
-                    Attribute metadata = metadataKeeping(child.output(), ref.name());
-                    if (metadata != null) {
-                        UnresolvedPromqlLabelRef read = ownByName.get(ref.name());
-                        NameId id = read != null ? declared.getOrDefault(read.id(), read.id()) : new NameId();
-                        Alias extracted = new Alias(
-                            ref.source(),
-                            ref.name(),
-                            new TimeSeriesGet(ref.source(), metadata, Literal.keyword(ref.source(), ref.name())),
-                            id
-                        );
-                        nulls.add(extracted);
-                        column = extracted.toAttribute();
-                    }
-                }
-                if (column == null) {
-                    // under the id the node reads; a key pushed down from above gets its own, as each input defines it apart
-                    UnresolvedPromqlLabelRef read = ownByName.get(ref.name());
-                    NameId id = read != null ? declared.getOrDefault(read.id(), read.id()) : new NameId();
-                    Alias missing = new Alias(ref.source(), ref.name(), new Literal(ref.source(), null, DataType.KEYWORD), id);
-                    nulls.add(missing);
-                    column = missing.toAttribute();
+                    Alias alias = new Alias(ref.source(), ref.name(), expression, id);
+                    nulls.add(alias);
+                    column = alias.toAttribute();
                 }
                 byName.put(ref.name(), column);
             }
             LogicalPlan plan = nulls.isEmpty() ? child : new Eval(node.source(), child, nulls);
             return new Binding(plan, byName);
+        }
+
+        /** Selects the value independently of allocating aliases or rewriting the consumer. */
+        private Expression value(List<Attribute> output, UnresolvedPromqlLabelRef ref) {
+            Attribute column = column(output, ref);
+            if (column != null) {
+                return column;
+            }
+            if (ref.isMetadata()) {
+                Attribute input = typed ? finerMetadata(output, ref.unset()) : null;
+                if (input == null) {
+                    throw unsupported(ref);
+                }
+                var labels = new LinkedHashSet<>(ref.unset());
+                labels.removeAll(unsetByName.get(input.name()));
+                return unset(ref.source(), input, labels);
+            }
+            if (typed && VectorBinaryOperator.EMPTY_SIGNATURE_KEY.equals(ref.name())) {
+                return new ToTimeSeries(ref.source(), Literal.keyword(ref.source(), "{}"));
+            }
+            // Keyword metadata cannot extract a label; silently using null would change matching semantics.
+            if (typed == false && holdsInMetadata(output, ref.name())) {
+                throw unsupported(ref);
+            }
+            Attribute metadata = metadataKeeping(output, ref.name());
+            return metadata != null
+                ? new TimeSeriesGet(ref.source(), metadata, Literal.keyword(ref.source(), ref.name()))
+                : new Literal(ref.source(), null, DataType.KEYWORD);
         }
 
         // -- helpers --
@@ -956,15 +890,6 @@ public final class ResolvePromqlLabelRefs extends ParameterizedRule<LogicalPlan,
                 }
             }
             return kept;
-        }
-
-        private static int indexOf(List<UnresolvedPromqlLabelRef> refs, Predicate<UnresolvedPromqlLabelRef> test) {
-            for (int i = 0; i < refs.size(); i++) {
-                if (test.test(refs.get(i))) {
-                    return i;
-                }
-            }
-            return -1;
         }
 
         /** Wraps every value that aggregates nothing across series in {@link Values}: each group is one input row. */
