@@ -64,7 +64,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
-import java.util.TreeSet;
 
 import static org.elasticsearch.xpack.esql.common.Failure.fail;
 
@@ -1075,49 +1074,90 @@ public class PromqlCommand extends UnaryPlan implements TelemetryAware, Timestam
     }
 
     /**
-     * A top-level {@code or} on keyword metadata deduplicates series on their metadata, which keeps {@code __name__} where the
-     * series store it. That matches Prometheus, which compares label sets without {@code __name__}, only when every branch
-     * reads the same labels and none of them keeps a stored {@code __name__}.
+     * A top-level {@code or} on keyword metadata deduplicates series on their labels as the operands read them, which keep
+     * {@code __name__} where the series store it and an operand does not drop it. Prometheus compares label sets without
+     * {@code __name__}, so the two agree only when no pair of operands can hold series that differ in {@code __name__}
+     * alone:
+     * <ul>
+     *   <li>operands that name their labels compare them as columns, a label one lacks as absent, as Prometheus does;</li>
+     *   <li>an operand without labels, such as {@code vector(1)}, beside opaque ones that keep no stored {@code __name__};</li>
+     *   <li>opaque operands that leave different labels out, or keep the name of the same metric, or all drop it.</li>
+     * </ul>
      */
     private void verifyKeywordUnion(Failures failures, VectorBinarySet union) {
-        boolean storesName = child().output().stream().anyMatch(field -> LabelMatcher.NAME.equals(PromqlLabels.labelName(field)));
         List<LogicalPlan> branches = VectorBinarySet.flattenUnion(union);
         if (branches.stream().anyMatch(PromqlPlan::returnsScalar)) {
             return; // a scalar operand is illegal whatever the metadata, see verifySetOperator
         }
-        List<Object> first = null;
+        boolean storesName = child().output().stream().anyMatch(field -> LabelMatcher.NAME.equals(PromqlLabels.labelName(field)));
+        List<UnresolvedPromqlAttribute> opaque = new ArrayList<>();
+        List<LogicalPlan> opaqueBranches = new ArrayList<>();
+        boolean labelledConcrete = false;
+        boolean labellessConcrete = false;
         for (LogicalPlan branch : branches) {
             UnresolvedPromqlAttribute metadata = PromqlLabels.metadataLabel(branch.output());
-            if (storesName && metadata != null && metadata.unset().contains(LabelMatcher.NAME) == false) {
-                failures.add(
-                    fail(
-                        union,
-                        "set operator [or] over series that keep __name__ requires typed time-series metadata [{}]",
-                        union.sourceText()
-                    )
-                );
-                return;
-            }
-            List<Object> shape = List.of(
-                metadata != null,
-                metadata == null ? Set.of() : new TreeSet<>(metadata.unset()),
-                new TreeSet<>(
-                    PromqlLabels.labelNames(branch.output().stream().filter(a -> PromqlLabels.isMetadataLabel(a) == false).toList())
-                )
-            );
-            if (first == null) {
-                first = shape;
-            } else if (first.equals(shape) == false) {
-                failures.add(
-                    fail(
-                        union,
-                        "set operator [or] between operands with different labels requires typed time-series metadata [{}]",
-                        union.sourceText()
-                    )
-                );
-                return;
+            if (metadata != null) {
+                opaque.add(metadata);
+                opaqueBranches.add(branch);
+            } else if (branch.output().stream().anyMatch(a -> PromqlLabels.isMetadataLabel(a) == false)) {
+                labelledConcrete = true;
+            } else {
+                labellessConcrete = true;
             }
         }
+        if (opaque.isEmpty()) {
+            return;
+        }
+        boolean keepsName = storesName && opaque.stream().anyMatch(metadata -> metadata.unset().contains(LabelMatcher.NAME) == false);
+        boolean agree = labelledConcrete == false && (labellessConcrete == false || keepsName == false);
+        for (int i = 0; agree && i < opaque.size(); i++) {
+            for (int j = i + 1; agree && j < opaque.size(); j++) {
+                agree = keywordUnionAgrees(storesName, opaque.get(i), opaqueBranches.get(i), opaque.get(j), opaqueBranches.get(j));
+            }
+        }
+        if (agree == false) {
+            failures.add(
+                fail(union, "set operator [or] between these operands requires typed time-series metadata [{}]", union.sourceText())
+            );
+        }
+    }
+
+    private static boolean keywordUnionAgrees(
+        boolean storesName,
+        UnresolvedPromqlAttribute left,
+        LogicalPlan leftBranch,
+        UnresolvedPromqlAttribute right,
+        LogicalPlan rightBranch
+    ) {
+        boolean leftKeeps = storesName && left.unset().contains(LabelMatcher.NAME) == false;
+        boolean rightKeeps = storesName && right.unset().contains(LabelMatcher.NAME) == false;
+        if (leftKeeps == false && rightKeeps == false) {
+            return true;
+        }
+        Set<String> leftOthers = new HashSet<>(left.unset());
+        leftOthers.remove(LabelMatcher.NAME);
+        Set<String> rightOthers = new HashSet<>(right.unset());
+        rightOthers.remove(LabelMatcher.NAME);
+        if (leftOthers.equals(rightOthers) == false) {
+            return true; // one leaves out a label the other keeps: their series never share a label set
+        }
+        if (leftKeeps != rightKeeps) {
+            return false;
+        }
+        Set<String> metrics = new HashSet<>(selectedMetrics(leftBranch));
+        metrics.addAll(selectedMetrics(rightBranch));
+        return metrics.size() == 1;
+    }
+
+    /** The metrics the selectors of {@code plan} read. */
+    private static Set<String> selectedMetrics(LogicalPlan plan) {
+        Set<String> metrics = new HashSet<>();
+        plan.forEachDown(Selector.class, selector -> {
+            if (selector instanceof LiteralSelector == false) {
+                metrics.add(selector.series() instanceof NamedExpression named ? named.name() : String.valueOf(selector.series()));
+            }
+        });
+        return metrics;
     }
 
     /** The {@code or} operators of the chain at the root of {@code p}, which translate as one top-level union. */

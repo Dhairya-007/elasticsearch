@@ -293,23 +293,23 @@ public class PromqlVerifierTests extends ESTestCase {
     }
 
     /**
-     * A top-level or on keyword metadata deduplicates on metadata, so its operands must read the same labels; otherwise
-     * Prometheus' comparison without __name__ needs typed metadata.
+     * A top-level or on keyword metadata deduplicates on the labels its operands read. Operands that name their labels and
+     * opaque ones mixed need typed metadata to compare as Prometheus does; the source here stores no __name__.
      */
-    public void testKeywordUnionNeedsOperandsWithTheSameLabels() {
+    public void testKeywordUnionOperands() {
         for (String query : List.of(
             "rate(network.bytes_in[5m]) or irate(network.bytes_in[5m])",
             "sum(network.bytes_in) or vector(0)",
-            "sum by (host) (network.bytes_in) or sum by (host) (network.connections)"
+            "abs(network.bytes_in) or network.connections",
+            "sum by (host) (network.bytes_in) or sum by (host, metricset) (network.connections)"
         )) {
             assertTrue(query, keywordTsdb.query("PROMQL index=test step=5m " + query).resolved());
         }
         for (String query : List.of(
             "sum by (host) (network.bytes_in) or network.connections",
-            "abs(network.bytes_in) or network.connections",
-            "rate(network.bytes_in[5m]) or vector(1)"
+            "network.connections or max by (host) (network.bytes_in)"
         )) {
-            assertSetOperatorNeedsTypedMetadata(query, "set operator [or] between operands with different labels requires typed");
+            assertSetOperatorNeedsTypedMetadata(query, "set operator [or] between these operands requires typed time-series metadata");
         }
     }
 
