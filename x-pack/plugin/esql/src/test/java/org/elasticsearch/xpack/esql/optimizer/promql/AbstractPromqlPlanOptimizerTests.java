@@ -54,7 +54,7 @@ public abstract class AbstractPromqlPlanOptimizerTests extends AbstractLogicalPl
      * typed metadata without its labels instead of a keyword column without them.
      */
     protected boolean typedTimeSeriesMetadata() {
-        return EsqlCapabilities.Cap.PROMQL_ENABLE_TIMESERIES_TYPE.isEnabled()
+        return EsqlCapabilities.Cap.ENABLE_TIMESERIES_DATA_TYPE.isEnabled()
             && TimeSeriesMetadataAttribute.supportTimeSeriesMetadataType(minimumVersionAtLeast(TimeSeriesCollapse.TS_COLLAPSE));
     }
 
