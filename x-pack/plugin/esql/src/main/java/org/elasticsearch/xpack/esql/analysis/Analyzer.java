@@ -162,8 +162,7 @@ import org.elasticsearch.xpack.esql.optimizer.rules.logical.SubstituteSurrogateE
 import org.elasticsearch.xpack.esql.optimizer.rules.logical.TranslateTimeSeriesAggregate;
 import org.elasticsearch.xpack.esql.optimizer.rules.logical.TranslateTimeSeriesWithout;
 import org.elasticsearch.xpack.esql.optimizer.rules.logical.promql.AddPromqlResultOrder;
-import org.elasticsearch.xpack.esql.optimizer.rules.logical.promql.PathTraceUnresolvedPromqlAttributeRefs;
-import org.elasticsearch.xpack.esql.optimizer.rules.logical.promql.PruneUnresolvedPromqlAttributeRefs;
+import org.elasticsearch.xpack.esql.optimizer.rules.logical.promql.BindPromqlAttributeRefs;
 import org.elasticsearch.xpack.esql.optimizer.rules.logical.promql.TranslatePromqlToEsqlPlan;
 import org.elasticsearch.xpack.esql.optimizer.rules.logical.promql.TranslateTimeSeriesCollapse;
 import org.elasticsearch.xpack.esql.optimizer.rules.physical.local.LucenePushdownPredicates;
@@ -338,11 +337,9 @@ public class Analyzer extends ParameterizedRuleExecutor<LogicalPlan, AnalyzerCon
                 new AddPromqlResultOrder(),
                 // translate PromQL plan to ESQL. It should run before TranslateTimeSeriesAggregate and implicit casting
                 new TranslatePromqlToEsqlPlan(),
-                // Names every metadata reference of the translated plan after the column of the source's series it reads.
-                new PathTraceUnresolvedPromqlAttributeRefs(),
                 // Binds the labels the translated plan reads to the columns producing them. ResolveAndVerifyPromqlRefs
                 // resolves the references of the PromQL command itself, before translation.
-                new PruneUnresolvedPromqlAttributeRefs()
+                new BindPromqlAttributeRefs()
             ),
             new Batch<>(
                 "Resolution",

@@ -1088,7 +1088,7 @@ public abstract sealed class VectorBinaryOperator extends BinaryPlan implements 
 
     /**
      * Grain identity for {@link Frame#sharesGrainWith}: metadata keys are distinguished by what they leave out
-     * ({@link PromqlLabels#metadataLabelName}), not only by the pre-PathTrace name {@code _timeseries}. Otherwise
+     * ({@link PromqlLabels#metadataLabelName}), not only by the untraced name {@code _timeseries}. Otherwise
      * {@code max without (job)} and {@code sum without (job, instance)} look like the same grain, fold, and multiply
      * per leftover label (promfuzz-vm 820).
      */

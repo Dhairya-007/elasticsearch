@@ -95,7 +95,7 @@ public final class ValueTransformationFunction extends PromqlFunctionCall {
     @Override
     public IntermediateResult translate(TranslationContext context) {
         // Name drop is declared in {@link #output()}; union branches project that unset onto a shared
-        // {@code _timeseries} alias so PathTrace omits {@code __name__} without an Eval statement that would
+        // {@code _timeseries} alias so tracing omits {@code __name__} without an Eval statement that would
         // break rate/sum aggregate fusion.
         return translateValueFunction(context);
     }
