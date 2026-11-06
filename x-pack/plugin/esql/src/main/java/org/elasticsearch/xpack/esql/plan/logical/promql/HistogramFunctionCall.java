@@ -19,6 +19,7 @@ import org.elasticsearch.xpack.esql.plan.logical.promql.TranslationContext.Inter
 import org.elasticsearch.xpack.esql.plan.logical.promql.selector.LabelMatcher;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -50,8 +51,10 @@ public abstract sealed class HistogramFunctionCall extends PromqlFunctionCall pe
         if (output == null) {
             var keys = new ArrayList<Attribute>();
             for (Attribute attr : child().output()) {
-                if (PromqlLabels.isMetadataLabel(attr)) {
-                    keys.add(UnresolvedPromqlAttribute.metadata(source(), COLLAPSED_LABELS));
+                if (attr instanceof UnresolvedPromqlAttribute metadata && metadata.isMetadata()) {
+                    var excluded = new LinkedHashSet<>(metadata.unset());
+                    excluded.addAll(COLLAPSED_LABELS);
+                    keys.add(UnresolvedPromqlAttribute.metadata(source(), excluded));
                 } else if (MetadataAttribute.isTimeSeriesAttributeName(attr.name())
                     || LE_LABEL.equals(PromqlLabels.labelName(attr)) == false) {
                         keys.add(attr);

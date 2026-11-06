@@ -47,23 +47,12 @@ public final class PromqlLabels {
     }
 
     /**
-     * Labels absent from node's result when walking toward the selector
-     * Null when every label is promoted.
+     * Labels excluded from the result's residual metadata; they may still exist as promoted columns.
+     * Null when the result has no residual metadata. The output contract already composes child exclusions.
      */
     public static @Nullable Set<String> excluded(LogicalPlan node) {
         UnresolvedPromqlAttribute metadata = metadataLabel(node.output());
-        if (metadata == null) {
-            return null;
-        }
-        var excluded = new LinkedHashSet<>(metadata.unset());
-        for (LogicalPlan child : node.children()) {
-            Set<String> input = excluded(child);
-            if (input != null) {
-                excluded.addAll(input);
-                break;
-            }
-        }
-        return excluded;
+        return metadata == null ? null : metadata.unset();
     }
 
     /**
