@@ -321,7 +321,7 @@ public class PromqlCommand extends UnaryPlan implements TelemetryAware, Timestam
      * the participating nodes read - a keyword read on an older node is cast to it. Keyword where the type is disabled.
      */
     public static DataType timeseriesType() {
-        return EsqlCapabilities.Cap.PROMQL_ENABLE_TIMESERIES_TYPE.isEnabled() ? DataType.TIMESERIES_DATA_TYPE : DataType.KEYWORD;
+        return EsqlCapabilities.Cap.ENABLE_TIMESERIES_DATA_TYPE.isEnabled() ? DataType.TIMESERIES_DATA_TYPE : DataType.KEYWORD;
     }
 
     /**
@@ -329,7 +329,7 @@ public class PromqlCommand extends UnaryPlan implements TelemetryAware, Timestam
      * it. Otherwise it is the keyword column, and labels left out of it come only from the source.
      */
     public static boolean usesTimeSeriesMetadata(AnalyzerContext analyzer) {
-        return EsqlCapabilities.Cap.PROMQL_ENABLE_TIMESERIES_TYPE.isEnabled()
+        return EsqlCapabilities.Cap.ENABLE_TIMESERIES_DATA_TYPE.isEnabled()
             && TimeSeriesMetadataAttribute.supportTimeSeriesMetadataType(analyzer.minimumVersion());
     }
 
