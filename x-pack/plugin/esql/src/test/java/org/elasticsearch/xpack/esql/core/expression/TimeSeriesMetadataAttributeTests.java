@@ -108,7 +108,7 @@ public class TimeSeriesMetadataAttributeTests extends AbstractNodeTestCase<TimeS
     }
 
     public void testFactorySelectsRepresentationAtVersionBoundary() {
-        var introduced = TransportVersion.fromName("promql_functional_timeseries");
+        var introduced = TransportVersion.fromName("timeseries_data_type");
         var previous = TransportVersionUtils.getPreviousVersion(introduced);
         var exclusions = Set.of("pod");
         assertEquals(DataType.KEYWORD, TimeSeriesMetadataAttribute.create(Source.EMPTY, exclusions).dataType());
