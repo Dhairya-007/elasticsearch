@@ -699,6 +699,7 @@ public class PromqlCommand extends UnaryPlan implements TelemetryAware, Timestam
     ) {
         // Validate entire plan. Each contiguous `or` chain (top-level or nested) flattens to one UnionAll; reject
         // chains that exceed the UnionAll branch limit here rather than during translation.
+        Set<VectorBinarySet> topLevelUnions = topLevelUnionChain(p);
         Set<VectorBinarySet> countedUnionChains = new HashSet<>();
         p.forEachDown(VectorBinarySet.class, setOp -> {
             if (setOp.op() != VectorBinarySet.SetOp.UNION || countedUnionChains.contains(setOp)) {
@@ -798,7 +799,7 @@ public class PromqlCommand extends UnaryPlan implements TelemetryAware, Timestam
                         }
                     }
                     if (binaryOperator instanceof VectorBinarySet setOp) {
-                        verifySetOperator(failures, setOp);
+                        verifySetOperator(failures, setOp, typedMetadata, topLevelUnions.contains(setOp));
                     }
                     if (hasSourceBackedExpression(binaryOperator.left()) && hasSourceBackedExpression(binaryOperator.right())) {
                         verifySourceBackedOperands(failures, binaryOperator, typedMetadata);
@@ -1036,24 +1037,50 @@ public class PromqlCommand extends UnaryPlan implements TelemetryAware, Timestam
     }
 
     /**
-     * Set operators ({@code and}/{@code or}/{@code unless}) are supported except {@code or} with {@code on}/{@code ignoring}.
+     * Set operators ({@code and}/{@code or}/{@code unless}).
      * <ul>
      *   <li>Scalar operands are illegal for set operators in PromQL itself; we mirror Prometheus' wording.</li>
      *   <li>{@code and} (INTERSECT) keeps left series that match on the right (default or {@code on}/{@code ignoring}).</li>
      *   <li>{@code unless} (SUBTRACT) keeps left series with no match on the right, by default matching or by
      *       {@code on}/{@code ignoring}. Operands whose label sets never match anti-join too, so the left operand comes
      *       back whole, as in Prometheus.</li>
-     *   <li>{@code or} (UNION) without {@code on}/{@code ignoring} unions its branches by default matching, keeping one
-     *       series per step and label set without {@code __name__}. With {@code on}/{@code ignoring} several series of an
-     *       operand share a match signature and all of them stay, which needs a top-1 per signature that keeps its ties.</li>
+     *   <li>{@code or} (UNION) unions its branches, keeping one series per step and label set without {@code __name__};
+     *       with {@code on}/{@code ignoring} as {@code a or (b unless<M> a)}.</li>
      * </ul>
-     * Matching that leaves labels out of an opaque operand's metadata ({@code ignoring}, or default matching against a
-     * narrower label set) needs typed {@code _timeseries}; keyword metadata rejects it when the label refs are pruned.
+     * Each of them matches series on their labels without {@code __name__}, which keyword metadata cannot leave out: there
+     * only a top-level chain of {@code or} without {@code on}/{@code ignoring} runs, as it did before typed metadata.
      */
-    private static void verifySetOperator(Failures failures, VectorBinarySet setOp) {
+    private static void verifySetOperator(Failures failures, VectorBinarySet setOp, boolean typedMetadata, boolean topLevelUnion) {
         if (PromqlPlan.returnsScalar(setOp.left()) || PromqlPlan.returnsScalar(setOp.right())) {
             failures.add(fail(setOp, "set operator \"{}\" not allowed in binary scalar expression", setOp.op().keyword()));
             return;
+        }
+        if (typedMetadata) {
+            return;
+        }
+        if (setOp.op() != VectorBinarySet.SetOp.UNION) {
+            failures.add(
+                fail(setOp, "set operator [{}] requires typed time-series metadata [{}]", setOp.op().keyword(), setOp.sourceText())
+            );
+        } else if (setOp.match() != VectorMatch.NONE) {
+            failures.add(fail(setOp, "set operator [or] with on/ignoring requires typed time-series metadata [{}]", setOp.sourceText()));
+        } else if (topLevelUnion == false) {
+            failures.add(fail(setOp, "set operator [or] below the top level requires typed time-series metadata [{}]", setOp.sourceText()));
+        }
+    }
+
+    /** The {@code or} operators of the chain at the root of {@code p}, which translate as one top-level union. */
+    private static Set<VectorBinarySet> topLevelUnionChain(LogicalPlan p) {
+        Set<VectorBinarySet> chain = new HashSet<>();
+        collectUnionChain(p, chain);
+        return chain;
+    }
+
+    private static void collectUnionChain(LogicalPlan p, Set<VectorBinarySet> chain) {
+        if (p instanceof VectorBinarySet setOp && setOp.op() == VectorBinarySet.SetOp.UNION) {
+            chain.add(setOp);
+            collectUnionChain(setOp.left(), chain);
+            collectUnionChain(setOp.right(), chain);
         }
     }
 

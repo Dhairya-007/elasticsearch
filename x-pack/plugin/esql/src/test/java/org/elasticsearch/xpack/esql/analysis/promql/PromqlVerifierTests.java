@@ -261,21 +261,20 @@ public class PromqlVerifierTests extends ESTestCase {
     }
 
     public void testLogicalSetBinaryOperators() {
-        // and keeps left series that match on the right.
-        assertNotNull(tsdb.query("PROMQL index=test step=5m network.bytes_in and network.connections"));
-        assertNotNull(tsdb.query("PROMQL index=test step=5m sum by (host) (network.bytes_in) and sum by (host) (network.connections)"));
-        // unless keeps left series with no match on the right (default matching).
-        assertNotNull(tsdb.query("PROMQL index=test step=5m network.bytes_in unless network.connections"));
-        assertNotNull(tsdb.query("PROMQL index=test step=5m sum by (host) (network.bytes_in) unless sum by (host) (network.connections)"));
+        // and keeps left series that match on the right; unless keeps left series with no match on the right.
+        for (String op : List.of("and", "unless")) {
+            String message = "set operator [" + op + "] requires typed time-series metadata";
+            assertSetOperatorNeedsTypedMetadata("network.bytes_in " + op + " network.connections", message);
+            assertSetOperatorNeedsTypedMetadata("sum by (host) (network.bytes_in) " + op + " sum by (host) (network.connections)", message);
+        }
         // Operands whose series can never share a group anti-join: the left operand comes back whole, as in Prometheus.
         for (String query : List.of(
             "sum by (host, metricset) (network.bytes_in) unless sum by (host) (network.connections)",
-            "sum by (host) (network.bytes_in) unless network.connections"
+            "sum by (host) (network.bytes_in) unless network.connections",
+            "network.bytes_in unless sum by (host) (network.connections)"
         )) {
-            assertTrue(query, tsdb.query("PROMQL index=test step=5m " + query).resolved());
-            assertTrue(query, keywordTsdb.query("PROMQL index=test step=5m " + query).resolved());
+            assertSetOperatorNeedsTypedMetadata(query, "set operator [unless] requires typed time-series metadata");
         }
-        assertNeedsTypedMetadata("network.bytes_in unless sum by (host) (network.connections)");
         List.of("and", "unless").forEach(op -> {
             // Any scalar operand is illegal in PromQL itself.
             tsdb.error(
@@ -311,18 +310,28 @@ public class PromqlVerifierTests extends ESTestCase {
             "sum by (host) (network.bytes_in) or on () vector(1)",
             "sum by (host, metricset) (network.bytes_in) or on (host) sum by (host) (network.connections)",
             "network.bytes_in or on (host) network.connections",
-            "network.bytes_in or on (__name__, host) network.connections"
+            "network.bytes_in or on (__name__, host) network.connections",
+            "network.bytes_in or ignoring (host) network.connections"
         )) {
-            assertTrue(query, tsdb.query("PROMQL index=test step=5m " + query).resolved());
-            assertTrue(query, keywordTsdb.query("PROMQL index=test step=5m " + query).resolved());
+            assertSetOperatorNeedsTypedMetadata(query, "set operator [or] with on/ignoring requires typed time-series metadata");
         }
-        assertNeedsTypedMetadata("network.bytes_in or ignoring (host) network.connections");
     }
 
     /**
      * Resolves {@code query} under typed metadata. Keyword metadata rejects it: matching leaves labels out of an opaque
      * operand's metadata.
      */
+    /**
+     * Set operators match series on their labels without {@code __name__}, which keyword metadata cannot leave out: only a
+     * top-level chain of {@code or} without {@code on}/{@code ignoring} runs there.
+     */
+    private void assertSetOperatorNeedsTypedMetadata(String query, String keywordMessage) {
+        if (EsqlCapabilities.Cap.PROMQL_ENABLE_TIMESERIES_TYPE.isEnabled()) {
+            assertTrue(query, tsdb.query("PROMQL index=test step=5m " + query).resolved());
+        }
+        keywordTsdb.error("PROMQL index=test step=5m " + query, containsString(keywordMessage));
+    }
+
     private void assertNeedsTypedMetadata(String query) {
         if (EsqlCapabilities.Cap.PROMQL_ENABLE_TIMESERIES_TYPE.isEnabled()) {
             assertTrue(query, tsdb.query("PROMQL index=test step=5m " + query).resolved());
@@ -354,7 +363,10 @@ public class PromqlVerifierTests extends ESTestCase {
 
     public void testNestedUnionIsAllowed() {
         // Nested `or` under an aggregation translates as UnionAll + TopNBy (#158182).
-        assertTrue(tsdb.query("PROMQL index=test step=5m sum(network.bytes_in or network.connections)").resolved());
+        assertSetOperatorNeedsTypedMetadata(
+            "sum(network.bytes_in or network.connections)",
+            "set operator [or] below the top level requires typed time-series metadata"
+        );
     }
 
     public void testUnionBranchLimit() {

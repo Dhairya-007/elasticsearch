@@ -126,12 +126,14 @@ public class PromqlPlanSetOperatorTests extends AbstractPromqlPlanOptimizerTests
 
     /** Nested {@code or} under an aggregation flattens to UnionAll + TopNBy like the top-level chain. */
     public void testNestedUnionUnderSum() {
+        assumeTrue("set operators match without __name__, which needs typed metadata", typedTimeSeriesMetadata());
         LogicalPlan plan = planPromql("PROMQL index=k8s step=1m sum(network.bytes_in or network.cost)", false);
         assertTrue(plan.resolved());
         assertUnionDedupShape(plan, 2);
     }
 
     public void testNestedUnionRateOrIrate() {
+        assumeTrue("set operators match without __name__, which needs typed metadata", typedTimeSeriesMetadata());
         LogicalPlan plan = planPromql(
             "PROMQL index=k8s step=1m max(rate(network.total_bytes_in[5m]) or irate(network.total_bytes_in[5m]))",
             false
@@ -142,6 +144,7 @@ public class PromqlPlanSetOperatorTests extends AbstractPromqlPlanOptimizerTests
 
     /** Nested {@code or} as an arithmetic operand joins rather than folding UnionAll into one Aggregate. */
     public void testNestedUnionInArithmetic() {
+        assumeTrue("set operators match without __name__, which needs typed metadata", typedTimeSeriesMetadata());
         assumeTrue("joining union results needs typed metadata regrouping", versionMode == VersionMode.CURRENT);
         LogicalPlan plan = planPromql(
             "PROMQL index=k8s step=1m (rate(network.total_bytes_in[5m]) or irate(network.total_bytes_in[5m])) "
@@ -157,6 +160,7 @@ public class PromqlPlanSetOperatorTests extends AbstractPromqlPlanOptimizerTests
      * {@code a} sharing a signature all stay. The second branch anti-joins the right operand against the left one.
      */
     public void testOrOnUnionsTheUnmatchedRightSeries() {
+        assumeTrue("set operators match without __name__, which needs typed metadata", typedTimeSeriesMetadata());
         LogicalPlan plan = planPromql(
             "PROMQL index=k8s step=1m sum by (cluster, pod) (network.bytes_in) or on (cluster) sum by (cluster) (network.cost)",
             false
@@ -175,6 +179,7 @@ public class PromqlPlanSetOperatorTests extends AbstractPromqlPlanOptimizerTests
 
     /** The empty-guard idiom: {@code on ()} adds the right operand at the steps where the left one has no series. */
     public void testOrOnEmptyAntiJoinsOnStep() {
+        assumeTrue("set operators match without __name__, which needs typed metadata", typedTimeSeriesMetadata());
         LogicalPlan plan = planPromql("PROMQL index=k8s step=1m sum(rate(network.total_bytes_in[5m])) or on () vector(1)", false);
         assertTrue(plan.resolved());
         List<HashJoin> joins = plan.collect(HashJoin.class);
@@ -187,6 +192,7 @@ public class PromqlPlanSetOperatorTests extends AbstractPromqlPlanOptimizerTests
      * ({@code vector(1)}) must not fold into the expression above the join as if every left series had a match.
      */
     public void testUnlessConstantRightStaysNullWhereUnmatched() {
+        assumeTrue("set operators match without __name__, which needs typed metadata", typedTimeSeriesMetadata());
         LogicalPlan plan = planPromql("PROMQL index=k8s step=1m network.bytes_in unless on (cluster) vector(1)");
         List<HashJoin> joins = plan.collect(HashJoin.class);
         assertThat(joins, hasSize(1));
@@ -220,6 +226,7 @@ public class PromqlPlanSetOperatorTests extends AbstractPromqlPlanOptimizerTests
      * matches at most once.
      */
     public void testAndIgnoringJoinsManyToMany() {
+        assumeTrue("set operators match without __name__, which needs typed metadata", typedTimeSeriesMetadata());
         LogicalPlan plan = planPromql(
             "PROMQL index=k8s step=1m sum by (cluster, pod) (network.bytes_in) and ignoring (pod) sum by (cluster) (network.cost)",
             false
@@ -240,6 +247,7 @@ public class PromqlPlanSetOperatorTests extends AbstractPromqlPlanOptimizerTests
      * back empty: it anti-joins (LEFT) on the union of the operands' labels, so the left operand is kept whole.
      */
     public void testUnlessBetweenDifferentLabelSetsAntiJoins() {
+        assumeTrue("set operators match without __name__, which needs typed metadata", typedTimeSeriesMetadata());
         LogicalPlan plan = planPromql(
             "PROMQL index=k8s step=1m sum by (cluster, pod) (network.bytes_in) unless sum by (cluster) (network.cost)",
             false

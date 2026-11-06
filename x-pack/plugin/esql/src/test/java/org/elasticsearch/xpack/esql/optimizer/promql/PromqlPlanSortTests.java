@@ -61,10 +61,16 @@ public class PromqlPlanSortTests extends AbstractPromqlPlanOptimizerTests {
             "label_replace(sort(sum by (cluster) (network.bytes_in)), \"dst\", \"$1\", \"cluster\", \"(.*)\")",
             "sort(network.bytes_in) > 100",
             "100 < sort_desc(network.bytes_in)",
-            "sort(network.bytes_in) > network.cost",
-            "sort(network.bytes_in) and on(pod) network.cost",
-            "sort_desc(network.bytes_in) unless network.cost"
+            "sort(network.bytes_in) > network.cost"
         )) {
+            assertEquals(query, 1, planInstant(query).collect(OrderBy.class).size());
+        }
+    }
+
+    /** and and unless keep the left operand's series in their order. */
+    public void testInstantSortLeftOfAndUnlessInjectsOrderBy() {
+        assumeTrue("set operators match without __name__, which needs typed metadata", typedTimeSeriesMetadata());
+        for (String query : List.of("sort(network.bytes_in) and on(pod) network.cost", "sort_desc(network.bytes_in) unless network.cost")) {
             assertEquals(query, 1, planInstant(query).collect(OrderBy.class).size());
         }
     }
