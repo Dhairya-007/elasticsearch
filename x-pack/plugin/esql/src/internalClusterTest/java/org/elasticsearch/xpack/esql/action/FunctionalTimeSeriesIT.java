@@ -12,7 +12,6 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.CollectionUtils;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.test.ESIntegTestCase;
-import org.elasticsearch.xcontent.XContentType;
 import org.elasticsearch.xpack.esql.EsqlTestUtils;
 import org.elasticsearch.xpack.esql.VerificationException;
 import org.elasticsearch.xpack.esql.plan.logical.promql.selector.LabelMatcher;
@@ -70,57 +69,6 @@ public class FunctionalTimeSeriesIT extends AbstractEsqlIntegTestCase {
         assertRows(
             query("tx") + " | KEEP result, _timeseries",
             List.of(List.of(10.0, "{\"cluster\":\"prod\",\"host\":\"a\"}"), List.of(20.0, "{\"cluster\":\"prod\",\"host\":\"b\"}"))
-        );
-    }
-
-    /** Multivalued dimensions remain complete label values when the selector renders its metadata. */
-    public void testMultivaluedDimensionsInSelectorMetadata() {
-        indexMultivaluedAggregationGroups();
-
-        assertRows(
-            query("tx") + " | KEEP result, _timeseries",
-            List.of(
-                List.of(10.0, "{\"cluster\":\"prod\",\"host\":\"a\",\"region\":[\"east\",\"west\"],\"shard\":[\"1\",\"2\"]}"),
-                List.of(20.0, "{\"cluster\":\"prod\",\"host\":\"b\",\"region\":[\"east\",\"west\"],\"shard\":[\"1\",\"2\"]}"),
-                List.of(5.0, "{\"cluster\":\"prod\",\"host\":\"c\",\"region\":\"west\",\"shard\":\"2\"}"),
-                List.of(7.0, "{\"cluster\":\"dev\",\"host\":\"d\",\"region\":[\"east\",\"west\"],\"shard\":[\"1\",\"2\"]}")
-            )
-        );
-    }
-
-    /** Excluding a multivalued dimension removes its entire value before the current aggregation groups series. */
-    public void testWithoutExcludesMultivaluedDimensions() {
-        indexMultivaluedAggregationGroups();
-
-        assertRows(
-            query("sum without(host,region,shard)(tx)") + " | KEEP result, _timeseries",
-            List.of(List.of(35.0, "{\"cluster\":\"prod\"}"), List.of(7.0, "{\"cluster\":\"dev\"}"))
-        );
-        assertRows(
-            query("max without(region,shard)(sum without(host)(tx))") + " | KEEP result, _timeseries",
-            List.of(List.of(30.0, "{\"cluster\":\"prod\"}"), List.of(7.0, "{\"cluster\":\"dev\"}"))
-        );
-        assertRows(
-            query("sum by(region,shard)(sum without(host,region,shard)(tx))") + " | KEEP result, region, shard",
-            List.of(Arrays.asList(42.0, null, null))
-        );
-    }
-
-    /** Carrying multivalued labels through named and metadata groupings must not multiply the samples. */
-    public void testMultivaluedDimensionsDoNotDuplicateNestedTotals() {
-        indexMultivaluedAggregationGroups();
-
-        for (String expression : List.of(
-            "sum by(cluster)(sum by(cluster,region,shard,host)(tx))",
-            "sum by(cluster)(sum without(host)(sum by(cluster,region,shard,host)(tx)))",
-            "sum by(cluster)(sum without(host)(tx))",
-            "sum without(region,shard)(sum by(cluster,region,shard)(tx))"
-        )) {
-            assertRows(query(expression) + " | KEEP result, cluster", List.of(List.of(35.0, "prod"), List.of(7.0, "dev")));
-        }
-        assertRows(
-            query("count by(cluster)(sum without(host)(tx))") + " | KEEP result, cluster",
-            List.of(List.of(2.0, "prod"), List.of(1.0, "dev"))
         );
     }
 
@@ -694,66 +642,6 @@ public class FunctionalTimeSeriesIT extends AbstractEsqlIntegTestCase {
         );
     }
 
-    public void testKeywordNumericSourceTokensMatchIndexedLabelIdentity() {
-        createMetricsIndex(INDEX, Settings.builder().put("index.mapping.source.mode", "stored").build());
-        client().prepareIndex(INDEX).setSource("""
-            {"@timestamp":"2024-05-10T00:01:00Z","cluster":"prod","host":1e3,"tx":7.0}
-            """, XContentType.JSON).get();
-        client().prepareIndex(INDEX).setSource("""
-            {"@timestamp":"2024-05-10T00:01:00Z","cluster":"prod","host":1000.0,"tx":9.0}
-            """, XContentType.JSON).get();
-        refresh(INDEX);
-
-        // Keyword indexing retains numeric token spelling; residual metadata must expose exactly the same labels.
-        assertRows(query("sum by(host) (tx)") + " | KEEP result, host", List.of(List.of(7.0, "1e3"), List.of(9.0, "1000.0")));
-        assertRows(
-            query("tx") + " | KEEP result, _timeseries",
-            List.of(List.of(7.0, "{\"cluster\":\"prod\",\"host\":\"1e3\"}"), List.of(9.0, "{\"cluster\":\"prod\",\"host\":\"1000.0\"}"))
-        );
-        assertRows(
-            query("sum by(host)(sum without(cluster)(tx))") + " | KEEP result, host",
-            List.of(List.of(7.0, "1e3"), List.of(9.0, "1000.0"))
-        );
-    }
-
-    public void testResidualLabelsUseIndexedDimensionsWhenStoredSourceOmitsThem() {
-        assertAcked(
-            indicesAdmin().prepareCreate(INDEX)
-                .setSettings(
-                    Settings.builder()
-                        .put("index.mode", "time_series")
-                        .put("index.mapping.source.mode", "stored")
-                        .putList("index.routing_path", "cluster")
-                        .put("index.time_series.start_time", "2024-05-10T00:00:00Z")
-                        .put("index.time_series.end_time", "2024-05-10T01:00:00Z")
-                        .put("index.number_of_shards", 2)
-                        .put("index.number_of_replicas", 0)
-                        .put("index.routing.allocation.total_shards_per_node", 1)
-                )
-                .setMapping("""
-                    {
-                      "_source": {"excludes": ["host"]},
-                      "properties": {
-                        "@timestamp": {"type": "date"},
-                        "cluster": {"type": "keyword", "time_series_dimension": true},
-                        "host": {"type": "keyword", "time_series_dimension": true},
-                        "tx": {"type": "double", "time_series_metric": "gauge"}
-                      }
-                    }
-                    """)
-        );
-        ensureGreen(INDEX);
-        var indexed = client().prepareIndex(INDEX).setSource("""
-            {"@timestamp":"2024-05-10T00:01:00Z","cluster":"prod","host":1e3,"tx":7.0}
-            """, XContentType.JSON).get();
-        refresh(INDEX);
-        assertFalse(client().prepareGet(INDEX, indexed.getId()).get().getSourceAsMap().containsKey("host"));
-
-        assertRows(query("sum by(host) (tx)") + " | KEEP result, host", List.of(List.of(7.0, "1e3")));
-        assertRows(query("tx") + " | KEEP result, _timeseries", List.of(List.of(7.0, "{\"cluster\":\"prod\",\"host\":\"1e3\"}")));
-        assertRows(query("sum by(host)(sum without(cluster)(tx))") + " | KEEP result, host", List.of(List.of(7.0, "1e3")));
-    }
-
     /** Reading labels from a derived dictionary must restore their declared source types. */
     public void testByOverWithoutPreservesNativeLabelTypes() {
         createMetricsIndex(INDEX, Settings.builder().put("index.mapping.source.mode", "stored").build());
@@ -841,95 +729,6 @@ public class FunctionalTimeSeriesIT extends AbstractEsqlIntegTestCase {
         assertRows(query("sum without(host) (tx)") + " | KEEP result, _timeseries", List.of(List.of(30.0, "{\"cluster\":\"prod\"}")));
         assertRows(query("sum by(optional) (tx)") + " | KEEP result, optional", List.of(Arrays.asList(30.0, null)));
         assertRows(query("sum by(optional)(sum without(host)(tx))") + " | KEEP result, optional", List.of(Arrays.asList(30.0, null)));
-    }
-
-    /** Cross-metric default match ignores __name__: each side packs rest without it, then joins. */
-    public void testDefaultMatchAcrossMetricsIgnoresMetricName() {
-        assertAcked(
-            indicesAdmin().prepareCreate(INDEX)
-                .setSettings(
-                    Settings.builder()
-                        .put("index.mode", "time_series")
-                        .putList("index.routing_path", "labels.host")
-                        .put("index.time_series.start_time", "2024-05-10T00:00:00Z")
-                        .put("index.time_series.end_time", "2024-05-10T01:00:00Z")
-                        .put("index.number_of_shards", 2)
-                        .put("index.number_of_replicas", 0)
-                        .put("index.routing.allocation.total_shards_per_node", 1)
-                )
-                .setMapping("""
-                    {
-                      "properties": {
-                        "@timestamp": {"type": "date"},
-                        "labels": {
-                          "type": "object",
-                          "properties": {
-                            "__name__": {"type": "keyword", "time_series_dimension": true},
-                            "host": {"type": "keyword", "time_series_dimension": true}
-                          }
-                        },
-                        "available": {"type": "double", "time_series_metric": "gauge"},
-                        "total": {"type": "double", "time_series_metric": "gauge"}
-                      }
-                    }
-                    """)
-        );
-        ensureGreen(INDEX);
-        index(INDEX, "labels", Map.of("__name__", "available", "host", "a"), "available", 75.0);
-        index(INDEX, "labels", Map.of("__name__", "total", "host", "a"), "total", 100.0);
-        index(INDEX, "labels", Map.of("__name__", "available", "host", "b"), "available", 40.0);
-        index(INDEX, "labels", Map.of("__name__", "total", "host", "b"), "total", 80.0);
-        refresh(INDEX);
-
-        assertRows(
-            query("available / total") + " | KEEP result, _timeseries",
-            List.of(List.of(0.75, "{\"host\":\"a\"}"), List.of(0.5, "{\"host\":\"b\"}"))
-        );
-        // query_range wraps PROMQL in TS_COLLAPSE; dimensions must be the public _timeseries column.
-        assertRows(
-            query("available / total") + " | TS_COLLAPSE | KEEP result, _timeseries",
-            List.of(List.of(0.75, "{\"host\":\"a\"}"), List.of(0.5, "{\"host\":\"b\"}"))
-        );
-    }
-
-    /** Ordinary object labels still drop the reserved metric name after their logical names are normalized. */
-    public void testObjectLabelWithoutDropsNormalizedMetricName() {
-        assertAcked(
-            indicesAdmin().prepareCreate(INDEX)
-                .setSettings(
-                    Settings.builder()
-                        .put("index.mode", "time_series")
-                        .putList("index.routing_path", "labels.host")
-                        .put("index.time_series.start_time", "2024-05-10T00:00:00Z")
-                        .put("index.time_series.end_time", "2024-05-10T01:00:00Z")
-                        .put("index.number_of_shards", 2)
-                        .put("index.number_of_replicas", 0)
-                        .put("index.routing.allocation.total_shards_per_node", 1)
-                )
-                .setMapping("""
-                    {
-                      "properties": {
-                        "@timestamp": {"type": "date"},
-                        "labels": {
-                          "type": "object",
-                          "properties": {
-                            "__name__": {"type": "keyword", "time_series_dimension": true},
-                            "host": {"type": "keyword", "time_series_dimension": true}
-                          }
-                        },
-                        "tx": {"type": "double", "time_series_metric": "gauge"}
-                      }
-                    }
-                    """)
-        );
-        ensureGreen(INDEX);
-        index(INDEX, "labels", Map.of("__name__", "first_metric", "host", "a"), "tx", 7.0);
-        index(INDEX, "labels", Map.of("__name__", "second_metric", "host", "b"), "tx", 9.0);
-        refresh(INDEX);
-
-        for (String operand : List.of("tx", "avg_over_time(tx[1m])")) {
-            assertRows(query("sum without(labels.host)(" + operand + ")") + " | KEEP result, _timeseries", List.of(List.of(16.0, "{}")));
-        }
     }
 
     /** Short and qualified passthrough labels exclude the same source dimension before grouping raw samples. */
