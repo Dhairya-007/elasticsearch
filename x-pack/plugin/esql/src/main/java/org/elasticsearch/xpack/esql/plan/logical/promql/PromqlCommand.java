@@ -949,8 +949,9 @@ public class PromqlCommand extends UnaryPlan implements TelemetryAware, Timestam
             );
             return;
         }
-        // No consumer (top-level) or a topk-style reduction: the relabel is supported when it merely adds a new label to an
-        // identity that an enclosed `by(...)` aggregation has already reduced to concrete columns.
+        // No consumer (top-level) or a topk-style reduction: the relabel is supported over an identity that an enclosed
+        // `by(...)` aggregation has already reduced to concrete columns. Overwriting one fails the query where two series end
+        // up with one label set, as in Prometheus.
         String position = consumer instanceof AcrossSeriesReduction reduction
             ? "under [" + reduction.definition().name() + "]"
             : "as a top-level expression";
@@ -959,20 +960,6 @@ public class PromqlCommand extends UnaryPlan implements TelemetryAware, Timestam
             // Compare by label name, not attribute name: a destination written as `labels.pod` names the same label as the
             // aggregation's `pod`, which is how the analyzer shadows it and how translation resolves it.
             String destination = PromqlLabels.labelName(relabel.destination().name());
-            if (overwritesLabel(relabel, destination)) {
-                failures.add(
-                    fail(
-                        relabel,
-                        "[{}] used {} over a `by(...)` aggregation must add a new label, but destination [{}] overwrites a label of the "
-                            + "aggregation [{}]",
-                        name,
-                        position,
-                        destination,
-                        relabel.sourceText()
-                    )
-                );
-                return;
-            }
             // On this path the derived label is not consumed by a grouping but becomes an output column of its own, so
             // it must be checked against the built-in output columns just like a `by(...)` label.
             checkBuiltInColumnCollision(relabel, destination, failures);
@@ -992,37 +979,16 @@ public class PromqlCommand extends UnaryPlan implements TelemetryAware, Timestam
 
     /**
      * Typed time-series metadata is rewritten in place, so a relabel may sit anywhere. Where its derived label is an
-     * output column of its own - at the top level or under a topk-style reduction - it still must not overwrite a label of
-     * a {@code by(...)} aggregation nor collide with a built-in output column.
+     * output column of its own - at the top level or under a topk-style reduction - it still must not collide with a
+     * built-in output column.
      */
     private void checkTypedRelabelOutput(MetadataManipulationFunction relabel, LogicalPlan consumer, Failures failures) {
-        String name = relabel.definition().name();
         // At the top level or under a topk-style reduction the derived label is an output column of its own, whatever the
         // time-series metadata representation.
         if (consumer == null || consumer instanceof AcrossSeriesReduction) {
-            String position = consumer instanceof AcrossSeriesReduction reduction
-                ? "under [" + reduction.definition().name() + "]"
-                : "as a top-level expression";
             // Compare by label name, not attribute name: a destination written as `labels.pod` names the same label as the
             // aggregation's `pod`, which is how the analyzer shadows it and how translation resolves it.
-            String destination = PromqlLabels.labelName(relabel.destination().name());
-            if (identitySource(relabel.child()) instanceof AcrossSeriesAggregate agg
-                && agg.grouping() == AcrossSeriesAggregate.Grouping.BY
-                && overwritesLabel(relabel, destination)) {
-                failures.add(
-                    fail(
-                        relabel,
-                        "[{}] used {} over a `by(...)` aggregation must add a new label, but destination [{}] overwrites a label of the "
-                            + "aggregation [{}]",
-                        name,
-                        position,
-                        destination,
-                        relabel.sourceText()
-                    )
-                );
-                return;
-            }
-            checkBuiltInColumnCollision(relabel, destination, failures);
+            checkBuiltInColumnCollision(relabel, PromqlLabels.labelName(relabel.destination().name()), failures);
         }
     }
 
@@ -1078,21 +1044,6 @@ public class PromqlCommand extends UnaryPlan implements TelemetryAware, Timestam
             // yields anything else.
             default -> throw new AssertionError("unexpected identity source [" + identitySource.nodeName() + "]");
         };
-    }
-
-    /**
-     * Whether the relabel's destination (given as a PromQL label name, see {@link PromqlLabels#labelName}) names a label its
-     * input already carries. The derived value is a function of the input's labels, so adding a new label strictly refines
-     * the identity - series that differ before the relabel still differ after it - whereas overwriting one can collapse two
-     * series onto a shared label set and would need Prometheus' duplicate-label-set handling.
-     */
-    private static boolean overwritesLabel(MetadataManipulationFunction relabel, String destination) {
-        for (Attribute label : relabel.child().output()) {
-            if (PromqlLabels.isMetadataLabel(label) == false && PromqlLabels.labelName(label).equals(destination)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /**

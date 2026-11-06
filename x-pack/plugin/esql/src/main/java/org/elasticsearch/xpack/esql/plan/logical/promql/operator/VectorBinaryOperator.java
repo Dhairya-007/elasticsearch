@@ -29,7 +29,6 @@ import org.elasticsearch.xpack.esql.expression.predicate.operator.comparison.Equ
 import org.elasticsearch.xpack.esql.optimizer.rules.logical.TemporaryNameGenerator;
 import org.elasticsearch.xpack.esql.plan.logical.Aggregate;
 import org.elasticsearch.xpack.esql.plan.logical.BinaryPlan;
-import org.elasticsearch.xpack.esql.plan.logical.DistinctBy;
 import org.elasticsearch.xpack.esql.plan.logical.Eval;
 import org.elasticsearch.xpack.esql.plan.logical.Filter;
 import org.elasticsearch.xpack.esql.plan.logical.LogicalPlan;
@@ -724,24 +723,6 @@ public abstract sealed class VectorBinaryOperator extends BinaryPlan implements 
         return bindResult(context, leftValue, rightValue, probeInput.step(), join, bindOutput(context, declared));
     }
 
-    /**
-     * {@code plan} failing the query where two of its series share a label set at a step, as Prometheus fails a
-     * {@code group_left}/{@code group_right} match before it compares values: copying the one side's labels over the many
-     * side's can leave two many side series with the same labels.
-     */
-    private LogicalPlan uniqueSeries(Source source, LogicalPlan plan, Attribute step) {
-        List<Attribute> labelSet = new ArrayList<>();
-        labelSet.add(step);
-        labelSet.addAll(UnresolvedPromqlAttribute.tsIdentity(source(), output()));
-        // Binary, not keyword: a sort the optimizer pushes below the result's projection carries it along. Named apart from
-        // the join key packed below.
-        Attribute packed = PackDims.newPackedAttribute(
-            source,
-            TemporaryNameGenerator.locallyUniqueTemporaryName(PackDims.PACKED_FIELD_NAME)
-        );
-        return new DistinctBy(source, new PackDims(source, plan, labelSet, packed, true), packed, true);
-    }
-
     /** Whether an operand's pipeline is prone to Eval ghost channels that HashJoin cannot map (#158164). */
     private static boolean needsLayoutPin(IntermediateResult input) {
         return input.plan().anyMatch(UnionAll.class::isInstance)
@@ -844,8 +825,10 @@ public abstract sealed class VectorBinaryOperator extends BinaryPlan implements 
         // aggregates) resolve it by id, not just by name.
         Alias stepAlias = new Alias(step.source(), step.name(), step, context.stepAttr().id());
         Alias valueAlias = new Alias(source(), cmd.valueColumnName(), value, new NameId());
-        // Right over the join: the value and step Evals shadow the operands' columns of the same name.
-        LogicalPlan matched = match.grouping() == Joining.NONE ? join : uniqueSeries(cmd.source(), join, step);
+        // Right over the join: the value and step Evals shadow the operands' columns of the same name. Prometheus fails a
+        // group_left/group_right match before it compares values: copying the one side's labels over the many side's can
+        // leave two many side series with the same labels.
+        LogicalPlan matched = match.grouping() == Joining.NONE ? join : context.uniqueSeries(cmd.source(), join, step, output());
         LogicalPlan plan = new Eval(cmd.source(), matched, List.of(valueAlias, stepAlias));
         if (filter != null) {
             plan = new Filter(source(), plan, filter);

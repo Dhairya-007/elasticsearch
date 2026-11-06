@@ -228,6 +228,10 @@ public final class MetadataManipulationFunction extends PromqlFunctionCall {
             fields.add(new Alias(source, metadata.name(), metadata));
         }
         LogicalPlan plan = new Eval(context.cmd().source(), aggregated.plan(), fields);
+        if (overwritesLabel(context)) {
+            // Overwriting a label can leave two series with one label set, which Prometheus fails.
+            plan = context.uniqueSeries(source, plan, aggregated.step(), output());
+        }
         return new IntermediateResult(
             plan,
             aggregated.value(),
@@ -290,6 +294,23 @@ public final class MetadataManipulationFunction extends PromqlFunctionCall {
      * The value of a source label as a non-null string: {@code COALESCE(label, "")}. The verifier admits string labels only,
      * and a label the input lacks binds to null.
      */
+    /**
+     * Whether the destination names a label the input carries as a column, such as one its {@code by(...)} aggregation
+     * groups by. Overwriting it can leave two series with one label set.
+     */
+    private boolean overwritesLabel(TranslationContext context) {
+        if (namesBuiltInColumn(context)) {
+            return false;
+        }
+        String name = PromqlLabels.labelName(destination().name());
+        for (Attribute attribute : child().output()) {
+            if (PromqlLabels.isMetadataLabel(attribute) == false && PromqlLabels.labelName(attribute).equals(name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** Whether the destination is named like one of the command's built-in output columns (the step or the value column). */
     private boolean namesBuiltInColumn(TranslationContext context) {
         String name = PromqlLabels.labelName(destination().name());

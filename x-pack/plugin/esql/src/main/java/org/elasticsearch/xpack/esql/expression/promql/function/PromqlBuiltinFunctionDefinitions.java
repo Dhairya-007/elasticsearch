@@ -52,9 +52,7 @@ public class PromqlBuiltinFunctionDefinitions {
             + "{applies_to}`stack: ga =9.6` A call over an aggregation, such as `label_replace(sum by (job) (x), ...)`, "
             + "isn't supported yet.\n\n"
             + "{applies_to}`stack: ga 9.7+` {applies_to}`serverless: ga` A call over anything other than a `by(...)` aggregation, "
-            + "such as `sum(x)`, a `without(...)` aggregation, `topk`, or a binary operator, and a call that overwrites a "
-            + "grouping label, such as `label_replace(sum by (job) (x), \"job\", \"$1\", \"job\", \"(.*)\")`, aren't "
-            + "supported yet. Write a new label instead.\n\n";
+            + "such as `sum(x)`, a `without(...)` aggregation, `topk`, or a binary operator, isn't supported yet.\n\n";
 
     private static final String SORT_DIVERGENCE =
         "A call below the top level of the query, such as `abs(sort(x))`, isn't supported yet. {{prom}} applies the "

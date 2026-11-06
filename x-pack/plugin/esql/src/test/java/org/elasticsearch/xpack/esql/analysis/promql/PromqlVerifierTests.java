@@ -32,6 +32,7 @@ import org.elasticsearch.xpack.esql.index.IndexProperties;
 import org.elasticsearch.xpack.esql.optimizer.rules.logical.promql.TranslatePromqlToEsqlPlan;
 import org.elasticsearch.xpack.esql.parser.ParsingException;
 import org.elasticsearch.xpack.esql.parser.promql.PromqlAstTests;
+import org.elasticsearch.xpack.esql.plan.logical.DistinctBy;
 import org.elasticsearch.xpack.esql.plan.logical.Eval;
 import org.elasticsearch.xpack.esql.plan.logical.LogicalPlan;
 import org.elasticsearch.xpack.esql.plan.logical.Row;
@@ -1181,37 +1182,29 @@ public class PromqlVerifierTests extends ESTestCase {
         );
     }
 
-    public void testLabelReplaceOverwritingAggregatedIdentityLabelRejected() {
-        // Overwriting a label that is part of the aggregate's identity can map two distinct series onto one label set,
-        // which needs Prometheus' duplicate-label-set handling and stays rejected.
-        tsdb.error(
-            "PROMQL index=test step=5m label_replace(sum by (host) (network.bytes_in), \"host\", \"$1\", \"host\", \"(.+)\")",
-            containsString(
-                "[label_replace] used as a top-level expression over a `by(...)` aggregation must add a new label, "
-                    + "but destination [host] overwrites a label of the aggregation"
-            )
-        );
-        tsdb.error(
-            "PROMQL index=test step=5m topk(3, label_join(sum by (host) (network.bytes_in), \"host\", \"-\", \"host\"))",
-            containsString(
-                "[label_join] used under [topk] over a `by(...)` aggregation must add a new label, "
-                    + "but destination [host] overwrites a label of the aggregation"
-            )
-        );
+    public void testRelabelOverwritingAggregatedIdentityLabelFailsOnRepeatedLabelSets() {
+        // Overwriting a label of the aggregate's identity can map two distinct series onto one label set, which fails the
+        // query as in Prometheus.
+        for (String query : List.of(
+            "label_replace(sum by (host) (network.bytes_in), \"host\", \"$1\", \"host\", \"(.+)\")",
+            "topk(3, label_join(sum by (host) (network.bytes_in), \"host\", \"-\", \"host\"))"
+        )) {
+            LogicalPlan plan = tsdb.query("PROMQL index=test step=5m " + query);
+            assertThat(query, plan.collect(DistinctBy.class), hasSize(1));
+        }
     }
 
     public void testRelabelOverAggregatePrefixedDestinationComparedByLabelName() {
         // The analyzer and the translation treat a `labels.`-prefixed name as the same label as its bare form, so the
-        // verifier must too: `labels.host` over `sum by (host)` overwrites `host` (and would otherwise silently replace the
-        // grouping column), and `labels.step` collides with the built-in step column.
-        tsdb.error(
-            "PROMQL index=test step=5m label_replace(sum by (host) (network.bytes_in), \"labels.host\", \"$1\", \"host\", \"(.+)\")",
-            containsString("but destination [host] overwrites a label of the aggregation")
-        );
-        tsdb.error(
-            "PROMQL index=test step=5m topk(3, label_join(sum by (host) (network.bytes_in), \"labels.host\", \"-\", \"host\"))",
-            containsString("but destination [host] overwrites a label of the aggregation")
-        );
+        // verifier must too: `labels.host` over `sum by (host)` overwrites `host`, so it guards against repeated label sets,
+        // and `labels.step` collides with the built-in step column.
+        for (String query : List.of(
+            "label_replace(sum by (host) (network.bytes_in), \"labels.host\", \"$1\", \"host\", \"(.+)\")",
+            "topk(3, label_join(sum by (host) (network.bytes_in), \"labels.host\", \"-\", \"host\"))"
+        )) {
+            LogicalPlan plan = tsdb.query("PROMQL index=test step=5m " + query);
+            assertThat(query, plan.collect(DistinctBy.class), hasSize(1));
+        }
         tsdb.error(
             "PROMQL index=test step=5m label_replace(sum by (host) (network.bytes_in), \"labels.step\", \"$1\", \"host\", \"(.+)\")",
             containsString("label [step] collides with the built-in [step] output column")

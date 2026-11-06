@@ -536,6 +536,34 @@ public class FunctionalTimeSeriesIT extends AbstractEsqlIntegTestCase {
         );
     }
 
+    /**
+     * label_replace and label_join over a by(...) aggregation may overwrite one of its labels. Two series left with the same
+     * labels fail the query, as in Prometheus, rather than come back as two series with one label set.
+     */
+    public void testRelabelOverwritingGroupingLabel() {
+        createMetricsIndex(INDEX);
+        index(INDEX, "cluster", "prod", "host", "a", "region", "east", "tx", 1.0);
+        index(INDEX, "cluster", "prod", "host", "b", "region", "east", "tx", 3.0);
+        refresh(INDEX);
+        assertRows(
+            query("label_replace(sum by (host) (tx), \"host\", \"h-$1\", \"host\", \"(.*)\")") + " | KEEP result, host | SORT result",
+            List.of(List.of(1.0, "h-a"), List.of(3.0, "h-b"))
+        );
+        assertRows(
+            query("label_join(sum by (host, region) (tx), \"host\", \"-\", \"host\", \"region\")") + " | KEEP result, host | SORT result",
+            List.of(List.of(1.0, "a-east"), List.of(3.0, "b-east"))
+        );
+        assertRows(
+            query("topk(1, label_replace(sum by (host) (tx), \"host\", \"h-$1\", \"host\", \"(.*)\"))") + " | KEEP result, host",
+            List.of(List.of(3.0, "h-b"))
+        );
+        var merged = expectThrows(
+            Exception.class,
+            () -> run(query("label_replace(sum by (host) (tx), \"host\", \"x\", \"host\", \".*\")"))
+        );
+        assertThat(merged.getMessage(), containsString("input must not have duplicates"));
+    }
+
     /** or on(__name__, ...) keeps a right series that differs from a left one only in its name, also inside a default or. */
     public void testOrOnMetricNameKeepsSeriesApartByName() {
         createMetricsIndexWithRx(INDEX);
