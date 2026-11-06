@@ -7,18 +7,11 @@
 
 package org.elasticsearch.xpack.esql.optimizer.promql;
 
-import org.elasticsearch.index.IndexMode;
 import org.elasticsearch.xpack.esql.core.expression.Attribute;
 import org.elasticsearch.xpack.esql.core.expression.FoldContext;
 import org.elasticsearch.xpack.esql.core.expression.NamedExpression;
-import org.elasticsearch.xpack.esql.core.type.DataType;
-import org.elasticsearch.xpack.esql.core.type.DateEsField;
-import org.elasticsearch.xpack.esql.core.type.EsField;
-import org.elasticsearch.xpack.esql.core.type.KeywordEsField;
 import org.elasticsearch.xpack.esql.expression.Order;
 import org.elasticsearch.xpack.esql.expression.predicate.nulls.IsNotNull;
-import org.elasticsearch.xpack.esql.index.EsIndex;
-import org.elasticsearch.xpack.esql.index.IndexProperties;
 import org.elasticsearch.xpack.esql.plan.logical.Eval;
 import org.elasticsearch.xpack.esql.plan.logical.Filter;
 import org.elasticsearch.xpack.esql.plan.logical.LogicalPlan;
@@ -26,11 +19,8 @@ import org.elasticsearch.xpack.esql.plan.logical.TopNBy;
 import org.elasticsearch.xpack.esql.plan.logical.UnionAll;
 import org.elasticsearch.xpack.esql.plan.logical.join.HashJoin;
 import org.elasticsearch.xpack.esql.plan.logical.join.JoinTypes;
-import org.elasticsearch.xpack.esql.plan.logical.promql.selector.LabelMatcher;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import static org.elasticsearch.xpack.esql.EsqlTestUtils.as;
 import static org.hamcrest.Matchers.equalTo;
@@ -218,29 +208,6 @@ public class PromqlPlanSetOperatorTests extends AbstractPromqlPlanOptimizerTests
      * A default {@code or} whose left limb matches {@code on(__name__, ...)} can hold two series apart only by their name:
      * it unions by anti-join too, rather than keeping one series per default signature.
      */
-    public void testOrOverMetricNameMatchKeepsEveryLeftSeries() {
-        assumeTrue("the default or leaves the metric name out of typed metadata", typedTimeSeriesMetadata());
-        LogicalPlan plan = tsAnalyzer().addIndex(metricNameIndex())
-            .query("PROMQL index=prom step=1m (bytes_in or on (__name__, pod) cost) or bytes_in");
-        assertTrue(plan.resolved());
-        // The inner or unions twice: as the outer left operand, and as what the outer right operand is anti-joined against.
-        assertThat(plan.collect(UnionAll.class), hasSize(3));
-        assertTrue(plan.collect(TopNBy.class).stream().noneMatch(t -> t.child() instanceof UnionAll));
-    }
-
-    /** Series in the remote-write layout: the metric name is a {@code __name__} dimension beside the other labels. */
-    private static EsIndex metricNameIndex() {
-        Map<String, EsField> mapping = new HashMap<>();
-        for (String label : List.of(LabelMatcher.NAME, "pod")) {
-            mapping.put(label, new KeywordEsField(label, Map.of(), true, 0, false, false, EsField.TimeSeriesFieldType.DIMENSION));
-        }
-        for (String metric : List.of("bytes_in", "cost")) {
-            mapping.put(metric, new EsField(metric, DataType.DOUBLE, Map.of(), true, EsField.TimeSeriesFieldType.METRIC));
-        }
-        mapping.put("@timestamp", DateEsField.dateEsField("@timestamp", Map.of(), true, EsField.TimeSeriesFieldType.NONE));
-        return new EsIndex("prom", mapping, Map.of("prom", new IndexProperties(IndexMode.TIME_SERIES, 1)), Map.of(), Map.of());
-    }
-
     /**
      * {@code and} matches many-to-many: several left series may share one right series under {@code ignoring(pod)}.
      * The join must not demand one-to-one matching, and the build side is cut to one row per key so each left row

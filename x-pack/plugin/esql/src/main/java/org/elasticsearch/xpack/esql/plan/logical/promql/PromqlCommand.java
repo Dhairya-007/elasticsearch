@@ -802,13 +802,15 @@ public class PromqlCommand extends UnaryPlan implements TelemetryAware, Timestam
                             failures.add(fail(comp, "Comparisons [{}] between scalars must use the BOOL modifier", comp.op()));
                         }
                     }
-                    if (binaryOperator.match().filter() == VectorMatch.Filter.ON
-                        && (binaryOperator.match().filterLabels().contains(LabelMatcher.NAME)
-                            || binaryOperator.match().groupingLabels().contains(LabelMatcher.NAME))
-                        && storesMetricName() == false) {
-                        // Without a stored __name__ every series reads it as absent, so on(__name__) would match the series of
-                        // different metrics, which Prometheus keeps apart.
-                        failures.add(fail(lp, "matching on __name__ requires metrics that store a __name__ label [{}]", lp.sourceText()));
+                    if ((binaryOperator.match().filter() == VectorMatch.Filter.ON
+                        && binaryOperator.match().filterLabels().contains(LabelMatcher.NAME))
+                        || binaryOperator.match().groupingLabels().contains(LabelMatcher.NAME)) {
+                        // A series whose metric is a field stores no __name__ and reads it as absent, so on(__name__) would
+                        // match the series of different metrics, which Prometheus keeps apart. Which series store it is
+                        // known only from the data, so it is rejected for all.
+                        // TODO: Match on __name__ once the metric name is a dimension value.
+                        // https://github.com/elastic/elasticsearch/issues/146989
+                        failures.add(fail(lp, "matching on __name__ is not supported at this time [{}]", lp.sourceText()));
                     }
                     if (binaryOperator instanceof VectorBinarySet setOp) {
                         verifySetOperator(failures, setOp, typedMetadata, topLevelUnions.contains(setOp));
@@ -1168,7 +1170,7 @@ public class PromqlCommand extends UnaryPlan implements TelemetryAware, Timestam
         return metrics;
     }
 
-    /** Whether the source stores the metric name as a {@code __name__} label, as Prometheus remote write does. */
+    /** Whether some series may store the metric name as a {@code __name__} label, as Prometheus remote write does: a queried index maps it. */
     private boolean storesMetricName() {
         return child().output().stream().anyMatch(field -> LabelMatcher.NAME.equals(PromqlLabels.labelName(field)));
     }

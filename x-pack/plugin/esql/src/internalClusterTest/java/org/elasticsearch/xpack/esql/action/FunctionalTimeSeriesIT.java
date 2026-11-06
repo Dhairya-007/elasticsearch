@@ -572,19 +572,19 @@ public class FunctionalTimeSeriesIT extends AbstractEsqlIntegTestCase {
         );
     }
 
-    /** or on(__name__, ...) keeps a right series that differs from a left one only in its name, also inside a default or. */
-    public void testOrOnMetricNameKeepsSeriesApartByName() {
+    /**
+     * Matching on __name__ is rejected even where the series store it, as here: which series store it is known only from
+     * the data, and one whose metric is a field reads it as absent.
+     */
+    public void testMatchingOnMetricNameIsRejected() {
         createMetricsIndexWithRx(INDEX);
         index(INDEX, "cluster", "prod", "host", "a", LabelMatcher.NAME, "rx", "rx", 60.0);
         index(INDEX, "cluster", "prod", "host", "a", LabelMatcher.NAME, "tx", "tx", 10.0);
         refresh(INDEX);
-        List<List<Object>> expected = List.of(
-            List.of(10.0, "{\"__name__\":\"tx\",\"cluster\":\"prod\",\"host\":\"a\"}"),
-            List.of(60.0, "{\"__name__\":\"rx\",\"cluster\":\"prod\",\"host\":\"a\"}")
-        );
-        assertRows(query("tx or on(__name__, host) rx") + " | KEEP result, _timeseries | SORT result", expected);
-        // The default or keeps every left series, the two that differ only in their name included.
-        assertRows(query("(tx or on(__name__, host) rx) or tx") + " | KEEP result, _timeseries | SORT result", expected);
+        for (String q : List.of("tx or on(__name__, host) rx", "tx / on(__name__, host) rx")) {
+            var error = expectThrows(Exception.class, () -> run(query(q)));
+            assertThat(error.getMessage(), containsString("matching on __name__ is not supported at this time"));
+        }
     }
 
     /** Reject result names that collide with labels/metadata before the plan consistency checker. */

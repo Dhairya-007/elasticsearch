@@ -313,17 +313,17 @@ public class PromqlVerifierTests extends ESTestCase {
         }
     }
 
-    /** Without a stored __name__ every series reads it as absent, so matching on it would pair different metrics. */
-    public void testMatchingOnMetricNameNeedsAStoredName() {
+    /**
+     * A series whose metric is a field reads __name__ as absent, so matching on it would pair different metrics. Which
+     * series store it is known only from the data, so it is rejected whatever the mapping.
+     */
+    public void testMatchingOnMetricNameIsRejected() {
         for (String query : List.of(
             "network.bytes_in or on (__name__, host) network.connections",
             "network.bytes_in / on (__name__, host) network.connections",
             "network.bytes_in * on (host) group_left (__name__) network.connections"
         )) {
-            tsdb.error(
-                "PROMQL index=test step=5m " + query,
-                containsString("matching on __name__ requires metrics that store a __name__ label")
-            );
+            tsdb.error("PROMQL index=test step=5m " + query, containsString("matching on __name__ is not supported at this time"));
         }
     }
 

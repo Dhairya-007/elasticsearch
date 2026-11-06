@@ -168,20 +168,6 @@ public final class VectorBinarySet extends VectorBinaryOperator {
     }
 
     /**
-     * Whether {@code limb} can hold several series of one default signature at a step, which a top-1 per signature would
-     * cut to one: an or matching {@code on(__name__, ...)} keeps series that differ only in their name. Any other or keeps
-     * one series per default signature, as two series agreeing on every label but the name agree on its match signature.
-     */
-    private static boolean mayRepeatSignature(LogicalPlan limb) {
-        return limb.anyMatch(
-            node -> node instanceof VectorBinarySet setOp
-                && setOp.op() == SetOp.UNION
-                && setOp.match().filter() == VectorMatch.Filter.ON
-                && setOp.match().filterLabels().contains(LabelMatcher.NAME)
-        );
-    }
-
-    /**
      * Always rename value to kill UnionAll ghost channels (#158164).
      */
     private IntermediateResult wrapUnion(TranslationContext context, LogicalPlan union) {
@@ -372,15 +358,11 @@ public final class VectorBinarySet extends VectorBinaryOperator {
 
     /**
      * Left-to-right limbs of a default-matching or chain, which translation unions keeping one series per step and
-     * signature. An on/ignoring or is one limb. A chain is one limb too when a limb before its last can hold several
-     * series of one signature: the default union would keep only one of them.
+     * signature: series that agree on every label but {@code __name__} agree on it. An on/ignoring or is one limb.
      */
     public static List<LogicalPlan> flattenUnion(LogicalPlan node) {
         var branches = new ArrayList<LogicalPlan>();
         flattenUnion(node, branches);
-        if (branches.subList(0, branches.size() - 1).stream().anyMatch(VectorBinarySet::mayRepeatSignature)) {
-            return List.of(node);
-        }
         return branches;
     }
 

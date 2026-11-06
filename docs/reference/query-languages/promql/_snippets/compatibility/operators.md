@@ -124,7 +124,7 @@ For example: `sum by (instance) (a) / on(instance) sum by (instance) (b)`.
 | 29 | Nested aggregation next to an operand that reads a metric {applies_to}`stack: ga 9.5-9.6` | `count(count by (pod) (a)) / sum(b)` | - | [#158184]({{es-issue}}158184) |
 | 30 | A different `offset` per operand {applies_to}`stack: ga 9.5-9.6` | `rate(x[5m]) / rate(x[5m] offset 1h)` | `or` is supported | [#158184]({{es-issue}}158184) |
 | 31 | `topk`, `bottomk`, `limitk`, or `limit_ratio` next to an operand that isn't aggregated alike {applies_to}`stack: ga 9.7+` {applies_to}`serverless: ga` | `topk(2, a) * b` | Aggregate the other operand with `by(...)` | [#158184]({{es-issue}}158184) |
-| 32 | Matching on `__name__` over metrics that store no `__name__` label, such as OpenTelemetry metrics {applies_to}`stack: ga 9.7+` {applies_to}`serverless: ga` | `a / on(__name__, pod) b` | - | [#164971]({{es-issue}}164971) |
+| 32 | Matching on `__name__` {applies_to}`stack: ga 9.7+` {applies_to}`serverless: ga` | `a / on(__name__, pod) b`, `a * on(pod) group_left(__name__) b` | - | [#146989]({{es-issue}}146989) |
 | 33 | `label_replace` or `label_join` as an operand | `label_replace(a, ...) * on(pod) group_left(node) b` | - | [#157672]({{es-issue}}157672) |
 | 34 | `fill()`, `fill_left()`, and `fill_right()` ({{prom}}: `promql-binop-fill-modifiers` feature flag) | `a + fill(0) b` | - | [#164223]({{es-issue}}164223) |
 :::
