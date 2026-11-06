@@ -124,9 +124,10 @@ public class FunctionalTimeSeriesCapabilityTests extends ESTestCase {
             EsqlCapabilities.capabilities(functions, false).capabilities().contains(capability.capabilityName())
         );
         assertTrue(EsqlCapabilities.capabilities(functions, true).capabilities().contains(capability.capabilityName()));
+        // the metadata functions are internal, so no build advertises them
         for (String name : List.of("fn_ts_get", "fn_ts_set", "fn_ts_unset", "fn_ts_hash")) {
-            assertEquals(name, capability.isEnabled(), EsqlCapabilities.capabilities(functions, false).capabilities().contains(name));
-            assertTrue(name, EsqlCapabilities.capabilities(functions, true).capabilities().contains(name));
+            assertFalse(name, EsqlCapabilities.capabilities(functions, false).capabilities().contains(name));
+            assertFalse(name, EsqlCapabilities.capabilities(functions, true).capabilities().contains(name));
         }
     }
 }
