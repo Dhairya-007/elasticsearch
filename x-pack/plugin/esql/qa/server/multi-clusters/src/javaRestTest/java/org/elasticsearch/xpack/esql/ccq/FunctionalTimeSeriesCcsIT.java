@@ -36,7 +36,7 @@ public class FunctionalTimeSeriesCcsIT extends ESRestTestCase {
     private static final String QUERY_TIME = "2024-05-10T00:01:00Z";
     private static final List<String> REQUIRED_CAPABILITIES = List.of(
         EsqlCapabilities.Cap.PROMQL_COMMAND_V0.capabilityName(),
-        EsqlCapabilities.Cap.PROMQL_ENABLE_TIMESERIES_TYPE.capabilityName(),
+        EsqlCapabilities.Cap.ENABLE_TIMESERIES_DATA_TYPE.capabilityName(),
         EsqlCapabilities.Cap.PROMQL_WITHOUT_GROUPING.capabilityName(),
         EsqlCapabilities.Cap.TS_COMMAND_V0.capabilityName()
     );

@@ -158,7 +158,7 @@ public class PromqlVectorMatchingIT extends RestEsqlTestCase {
     public void testIgnoringLabellessVsOpaque() throws IOException {
         assumeTrue(
             "typed _timeseries required for opaque ignoring join keys",
-            hasCapabilities(adminClient(), List.of(EsqlCapabilities.Cap.PROMQL_ENABLE_TIMESERIES_TYPE.capabilityName()))
+            hasCapabilities(adminClient(), List.of(EsqlCapabilities.Cap.ENABLE_TIMESERIES_DATA_TYPE.capabilityName()))
         );
         assertRows(
             "PROMQL index=k8s step=10m result=(network.eth0.tx + ignoring (pod) sum(network.eth0.tx)) | KEEP result, step",
@@ -178,7 +178,7 @@ public class PromqlVectorMatchingIT extends RestEsqlTestCase {
         );
         assumeTrue(
             "typed _timeseries required",
-            hasCapabilities(adminClient(), List.of(EsqlCapabilities.Cap.PROMQL_ENABLE_TIMESERIES_TYPE.capabilityName()))
+            hasCapabilities(adminClient(), List.of(EsqlCapabilities.Cap.ENABLE_TIMESERIES_DATA_TYPE.capabilityName()))
         );
         assertRows(
             "PROMQL index=k8s step=10m result=(label_replace("
@@ -208,7 +208,7 @@ public class PromqlVectorMatchingIT extends RestEsqlTestCase {
         String orOn = "PROMQL index=k8s step=10m result=(sum by (cluster) (network.eth0.tx{cluster=\"prod\"}) "
             + "or on (cluster) sum by (cluster) (network.eth0.rx))"
             + keep;
-        if (hasCapabilities(adminClient(), List.of(EsqlCapabilities.Cap.PROMQL_ENABLE_TIMESERIES_TYPE.capabilityName())) == false) {
+        if (hasCapabilities(adminClient(), List.of(EsqlCapabilities.Cap.ENABLE_TIMESERIES_DATA_TYPE.capabilityName())) == false) {
             assertPromqlError(orOn, "set operator [or] with on/ignoring requires typed time-series metadata");
             return;
         }

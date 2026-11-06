@@ -94,7 +94,7 @@ public class PromqlAggregationGoldenTests extends GoldenTestCase {
     }
 
     private void aggregate(String expression) {
-        assumeTrue("requires functional time-series metadata", EsqlCapabilities.Cap.PROMQL_ENABLE_TIMESERIES_TYPE.isEnabled());
+        assumeTrue("requires functional time-series metadata", EsqlCapabilities.Cap.ENABLE_TIMESERIES_DATA_TYPE.isEnabled());
         builder("PROMQL index=k8s step=1h result=(" + expression + ")").since(TransportVersion.current()).run();
     }
 }

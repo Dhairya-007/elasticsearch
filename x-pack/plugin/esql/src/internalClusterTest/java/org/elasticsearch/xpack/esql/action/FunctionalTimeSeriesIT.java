@@ -43,7 +43,7 @@ public class FunctionalTimeSeriesIT extends AbstractEsqlIntegTestCase {
 
     @BeforeClass
     public static void checkCapability() {
-        assumeTrue("requires functional time-series metadata", EsqlCapabilities.Cap.PROMQL_ENABLE_TIMESERIES_TYPE.isEnabled());
+        assumeTrue("requires functional time-series metadata", EsqlCapabilities.Cap.ENABLE_TIMESERIES_DATA_TYPE.isEnabled());
     }
 
     @Override

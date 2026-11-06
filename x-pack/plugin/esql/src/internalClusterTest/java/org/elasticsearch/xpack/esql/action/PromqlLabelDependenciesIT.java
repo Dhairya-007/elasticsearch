@@ -58,7 +58,7 @@ public class PromqlLabelDependenciesIT extends AbstractEsqlIntegTestCase {
 
     /** A label named {@code a$b} leaves out a different view than labels {@code a} and {@code b}. */
     public void testDistinctMetadataViewsDoNotCollideOnLabelSeparator() {
-        assumeTrue("requires typed time-series metadata", EsqlCapabilities.Cap.PROMQL_ENABLE_TIMESERIES_TYPE.isEnabled());
+        assumeTrue("requires typed time-series metadata", EsqlCapabilities.Cap.ENABLE_TIMESERIES_DATA_TYPE.isEnabled());
         createIndex();
         index("host", "a", "tx", 1.0, "rx", 2.0);
         refresh(INDEX);

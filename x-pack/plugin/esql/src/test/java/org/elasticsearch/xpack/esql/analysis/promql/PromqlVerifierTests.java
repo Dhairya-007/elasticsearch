@@ -74,7 +74,7 @@ public class PromqlVerifierTests extends ESTestCase {
     private final TestAnalyzer keywordTsdb = analyzer().addIndex("test", "tsdb-mapping.json", IndexMode.TIME_SERIES)
         .stripErrorPrefix(true)
         .unmappedResolution(UnmappedResolution.NULLIFY)
-        .minimumTransportVersion(TransportVersionUtils.getPreviousVersion(TransportVersion.fromName("promql_functional_timeseries")));
+        .minimumTransportVersion(TransportVersionUtils.getPreviousVersion(TransportVersion.fromName("timeseries_data_type")));
 
     /**
      * Keyword metadata reads each WITHOUT view at the source and cannot derive one view from another: an outer WITHOUT keeps
@@ -106,7 +106,7 @@ public class PromqlVerifierTests extends ESTestCase {
 
     /** The same shapes are legal aggregation trees on the current metadata prototype. */
     public void testNestedWithoutAggregationsWithTypedMetadata() {
-        assumeTrue("requires functional time-series metadata", EsqlCapabilities.Cap.PROMQL_ENABLE_TIMESERIES_TYPE.isEnabled());
+        assumeTrue("requires functional time-series metadata", EsqlCapabilities.Cap.ENABLE_TIMESERIES_DATA_TYPE.isEnabled());
         tsdb.minimumTransportVersion(TransportVersion.current());
         for (String expression : nestedWithoutAggregations()) {
             assertTrue(expression, tsdb.query("PROMQL index=test step=5m result=(" + expression + ")").resolved());
@@ -115,7 +115,7 @@ public class PromqlVerifierTests extends ESTestCase {
 
     /** Label representation changes must not remove the independent restriction on the command's step column. */
     public void testAggregationStepLabelCollision() {
-        assumeTrue("requires functional time-series metadata", EsqlCapabilities.Cap.PROMQL_ENABLE_TIMESERIES_TYPE.isEnabled());
+        assumeTrue("requires functional time-series metadata", EsqlCapabilities.Cap.ENABLE_TIMESERIES_DATA_TYPE.isEnabled());
         tsdb.minimumTransportVersion(TransportVersion.current());
         for (String expression : List.of(
             "sum by(step)(network.bytes_in)",
@@ -360,14 +360,14 @@ public class PromqlVerifierTests extends ESTestCase {
      * top-level chain of {@code or} without {@code on}/{@code ignoring} runs there.
      */
     private void assertSetOperatorNeedsTypedMetadata(String query, String keywordMessage) {
-        if (EsqlCapabilities.Cap.PROMQL_ENABLE_TIMESERIES_TYPE.isEnabled()) {
+        if (EsqlCapabilities.Cap.ENABLE_TIMESERIES_DATA_TYPE.isEnabled()) {
             assertTrue(query, tsdb.query("PROMQL index=test step=5m " + query).resolved());
         }
         keywordTsdb.error("PROMQL index=test step=5m " + query, containsString(keywordMessage));
     }
 
     private void assertNeedsTypedMetadata(String query) {
-        if (EsqlCapabilities.Cap.PROMQL_ENABLE_TIMESERIES_TYPE.isEnabled()) {
+        if (EsqlCapabilities.Cap.ENABLE_TIMESERIES_DATA_TYPE.isEnabled()) {
             assertTrue(query, tsdb.query("PROMQL index=test step=5m " + query).resolved());
         }
         keywordTsdb.error(
@@ -701,7 +701,7 @@ public class PromqlVerifierTests extends ESTestCase {
     /** Opaque reductions as binary operands join once typed {@code _timeseries} can refine rest. */
     public void testOpaqueReductionBinaryJoinsWithTypedMetadata() {
         assumeTrue("requires independent binary join", EsqlCapabilities.Cap.PROMQL_BINARY_INDEPENDENT_JOIN.isEnabled());
-        assumeTrue("requires functional time-series metadata", EsqlCapabilities.Cap.PROMQL_ENABLE_TIMESERIES_TYPE.isEnabled());
+        assumeTrue("requires functional time-series metadata", EsqlCapabilities.Cap.ENABLE_TIMESERIES_DATA_TYPE.isEnabled());
         tsdb.minimumTransportVersion(TransportVersion.current());
         String query = "PROMQL index=test step=5m ";
         for (String accepted : List.of(
@@ -723,7 +723,7 @@ public class PromqlVerifierTests extends ESTestCase {
         assumeTrue("requires independent binary join", EsqlCapabilities.Cap.PROMQL_BINARY_INDEPENDENT_JOIN.isEnabled());
         assumeFalse(
             "requires functional time-series metadata to be disabled",
-            EsqlCapabilities.Cap.PROMQL_ENABLE_TIMESERIES_TYPE.isEnabled()
+            EsqlCapabilities.Cap.ENABLE_TIMESERIES_DATA_TYPE.isEnabled()
         );
         String query = "PROMQL index=test step=5m ";
         for (String rejected : List.of(
@@ -781,7 +781,7 @@ public class PromqlVerifierTests extends ESTestCase {
      * with {@code ts_unset}; the keyword path still rejects these shapes.
      */
     public void testHistogramOverOpaqueReductionOrWithoutIsAccepted() {
-        assumeTrue("requires functional time-series metadata", EsqlCapabilities.Cap.PROMQL_ENABLE_TIMESERIES_TYPE.isEnabled());
+        assumeTrue("requires functional time-series metadata", EsqlCapabilities.Cap.ENABLE_TIMESERIES_DATA_TYPE.isEnabled());
         TestAnalyzer classicHistograms = analyzer().addIndex("prom_hist", "mapping-promql-classic-histogram.json", IndexMode.TIME_SERIES)
             .minimumTransportVersion(TransportVersion.current());
         for (String function : List.of("histogram_quantile(0.9, ", "histogram_fraction(0, 0.2, ")) {
@@ -826,7 +826,7 @@ public class PromqlVerifierTests extends ESTestCase {
      * schema model helps here once the verifier gate is gone.
      */
     public void testNativeHistogramOverWithoutIsAccepted() {
-        assumeTrue("requires functional time-series metadata", EsqlCapabilities.Cap.PROMQL_ENABLE_TIMESERIES_TYPE.isEnabled());
+        assumeTrue("requires functional time-series metadata", EsqlCapabilities.Cap.ENABLE_TIMESERIES_DATA_TYPE.isEnabled());
         TestAnalyzer nativeHistograms = analyzer().addIndex("exp_histo", "exp_histo_sample-mappings.json", IndexMode.TIME_SERIES)
             .minimumTransportVersion(TransportVersion.current());
         for (String accepted : List.of(
@@ -1072,7 +1072,7 @@ public class PromqlVerifierTests extends ESTestCase {
     }
 
     public void testLabelReplaceOverConcreteLabelSetsResolves() {
-        assumeTrue("requires functional time-series metadata", EsqlCapabilities.Cap.PROMQL_ENABLE_TIMESERIES_TYPE.isEnabled());
+        assumeTrue("requires functional time-series metadata", EsqlCapabilities.Cap.ENABLE_TIMESERIES_DATA_TYPE.isEnabled());
         // Every one of these inputs carries a concrete label set, so the relabel reads its source labels as columns whatever
         // the time-series metadata representation, as Prometheus applies label_replace to any instant vector.
         for (String input : List.of(
@@ -1090,7 +1090,7 @@ public class PromqlVerifierTests extends ESTestCase {
 
     public void testLabelReplaceOpaquePlacementsResolveWithTypedMetadata() {
         // Typed rest admits opaque placements (#157672): destination is promoted beside rest; Bind uses ts_get for sources.
-        assumeTrue("requires typed _timeseries", EsqlCapabilities.Cap.PROMQL_ENABLE_TIMESERIES_TYPE.isEnabled());
+        assumeTrue("requires typed _timeseries", EsqlCapabilities.Cap.ENABLE_TIMESERIES_DATA_TYPE.isEnabled());
         tsdb.minimumTransportVersion(TransportVersion.current());
         assertTrue(tsdb.query("PROMQL index=test step=5m label_replace(network.bytes_in, \"dst\", \"$1\", \"host\", \"(.+)\")").resolved());
         assertTrue(
@@ -1193,7 +1193,7 @@ public class PromqlVerifierTests extends ESTestCase {
     }
 
     public void testLabelJoinOverBinaryOperatorReadsMatchedLabels() {
-        assumeTrue("requires functional time-series metadata", EsqlCapabilities.Cap.PROMQL_ENABLE_TIMESERIES_TYPE.isEnabled());
+        assumeTrue("requires functional time-series metadata", EsqlCapabilities.Cap.ENABLE_TIMESERIES_DATA_TYPE.isEnabled());
         // The binary operator's result carries the matched `host` label, so the derivation reads it as a column rather than
         // seeing it as absent and joining empty strings.
         LogicalPlan plan = tsdb.query(

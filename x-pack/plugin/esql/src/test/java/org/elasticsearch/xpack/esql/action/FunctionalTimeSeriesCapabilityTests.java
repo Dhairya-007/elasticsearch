@@ -37,7 +37,7 @@ public class FunctionalTimeSeriesCapabilityTests extends ESTestCase {
     public void testDisabledFeaturePreservesExistingTranslation() {
         assumeFalse(
             "requires functional time-series metadata to be disabled",
-            EsqlCapabilities.Cap.PROMQL_ENABLE_TIMESERIES_TYPE.isEnabled()
+            EsqlCapabilities.Cap.ENABLE_TIMESERIES_DATA_TYPE.isEnabled()
         );
         assertExistingTranslation(analyzer().addK8s().minimumTransportVersion(TransportVersion.current()));
     }
@@ -47,8 +47,8 @@ public class FunctionalTimeSeriesCapabilityTests extends ESTestCase {
      * source, so every shape resolves without typed metadata or the functions over it.
      */
     public void testOlderParticipatingVersionReadsKeywordMetadata() {
-        assumeTrue("requires functional time-series metadata", EsqlCapabilities.Cap.PROMQL_ENABLE_TIMESERIES_TYPE.isEnabled());
-        TransportVersion previous = TransportVersionUtils.getPreviousVersion(TransportVersion.fromName("promql_functional_timeseries"));
+        assumeTrue("requires functional time-series metadata", EsqlCapabilities.Cap.ENABLE_TIMESERIES_DATA_TYPE.isEnabled());
+        TransportVersion previous = TransportVersionUtils.getPreviousVersion(TransportVersion.fromName("timeseries_data_type"));
         var analyzer = analyzer().addK8s().minimumTransportVersion(previous);
         for (String expression : KEYWORD_SHAPES) {
             var plan = analyzer.query("PROMQL index=k8s step=1h result=(" + expression + ") | LIMIT 10");
@@ -86,7 +86,7 @@ public class FunctionalTimeSeriesCapabilityTests extends ESTestCase {
 
     /** WITHOUT drops the metric name on any version, over concrete BY labels and over the metadata alike. */
     public void testWithoutMetricNameAcrossVersions() {
-        assumeTrue("requires functional time-series metadata", EsqlCapabilities.Cap.PROMQL_ENABLE_TIMESERIES_TYPE.isEnabled());
+        assumeTrue("requires functional time-series metadata", EsqlCapabilities.Cap.ENABLE_TIMESERIES_DATA_TYPE.isEnabled());
         var mapping = new LinkedHashMap<String, EsField>();
         mapping.put("@timestamp", new EsField("@timestamp", DataType.DATETIME, Map.of(), true, EsField.TimeSeriesFieldType.NONE));
         mapping.put("metric", new EsField("metric", DataType.DOUBLE, Map.of(), true, EsField.TimeSeriesFieldType.METRIC));
@@ -107,7 +107,7 @@ public class FunctionalTimeSeriesCapabilityTests extends ESTestCase {
 
         assertTrue(analyzer.query("PROMQL index=metrics step=1h result=(sum without(pod)(metric)) | LIMIT 10").resolved());
 
-        TransportVersion previous = TransportVersionUtils.getPreviousVersion(TransportVersion.fromName("promql_functional_timeseries"));
+        TransportVersion previous = TransportVersionUtils.getPreviousVersion(TransportVersion.fromName("timeseries_data_type"));
         var keywordAnalyzer = analyzer().addIndex(index).minimumTransportVersion(previous);
         assertTrue(
             keywordAnalyzer.query("PROMQL index=metrics step=1h result=(sum by(" + LabelMatcher.NAME + ")(metric)) | LIMIT 10").resolved()
@@ -117,7 +117,7 @@ public class FunctionalTimeSeriesCapabilityTests extends ESTestCase {
 
     public void testCapabilityFollowsSnapshotBuild() {
         var functions = new EsqlFunctionRegistry();
-        var capability = EsqlCapabilities.Cap.PROMQL_ENABLE_TIMESERIES_TYPE;
+        var capability = EsqlCapabilities.Cap.ENABLE_TIMESERIES_DATA_TYPE;
         assertEquals(Build.current().isSnapshot(), capability.isEnabled());
         assertEquals(
             capability.isEnabled(),

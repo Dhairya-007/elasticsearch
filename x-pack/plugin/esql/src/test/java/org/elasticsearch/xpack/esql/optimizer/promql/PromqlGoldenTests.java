@@ -239,7 +239,7 @@ public class PromqlGoldenTests extends GoldenTestCase {
     // overwritten is materialized as a supported column - a passthrough dimension is unsupported in this static analyzer.
     public void testLabelReplaceOverwritesStoredLabel() {
         // typed _timeseries tells the series apart without the overwritten label, so the relabel fails on repeated label sets
-        assumeTrue("requires typed _timeseries", EsqlCapabilities.Cap.PROMQL_ENABLE_TIMESERIES_TYPE.isEnabled());
+        assumeTrue("requires typed _timeseries", EsqlCapabilities.Cap.ENABLE_TIMESERIES_DATA_TYPE.isEnabled());
         assumeTrue("requires PromQL support", EsqlCapabilities.Cap.PROMQL_COMMAND_V0.isEnabled());
         assumeTrue("requires PromQL label functions", EsqlCapabilities.Cap.PROMQL_LABEL_FUNCTIONS.isEnabled());
         builder("""
@@ -257,7 +257,7 @@ public class PromqlGoldenTests extends GoldenTestCase {
     // Uses the flat-dimension k8s index so the preserved stored destination is materialized as a supported column.
     public void testLabelReplaceNoMatchPreservesExisting() {
         // typed _timeseries tells the series apart without the overwritten label, so the relabel fails on repeated label sets
-        assumeTrue("requires typed _timeseries", EsqlCapabilities.Cap.PROMQL_ENABLE_TIMESERIES_TYPE.isEnabled());
+        assumeTrue("requires typed _timeseries", EsqlCapabilities.Cap.ENABLE_TIMESERIES_DATA_TYPE.isEnabled());
         assumeTrue("requires PromQL support", EsqlCapabilities.Cap.PROMQL_COMMAND_V0.isEnabled());
         assumeTrue("requires PromQL label functions", EsqlCapabilities.Cap.PROMQL_LABEL_FUNCTIONS.isEnabled());
         builder("""
