@@ -32,7 +32,7 @@ The functions in the [{{promql}} functions](/reference/query-languages/promql/fu
 | 51 | `label_replace` or `label_join` that writes a label named `step` {applies_to}`stack: ga 9.6+` {applies_to}`serverless: ga` | `label_replace(x, "step", ...)` | `step` is an output column of the `PROMQL` command | - |
 | 52 | `predict_linear` with a horizon computed by a function {applies_to}`stack: ga 9.7+` {applies_to}`serverless: ga` | `predict_linear(x[1h], time())`, `predict_linear(x[1h], scalar(y))` | Use a number, a duration literal, or arithmetic on literals | [#164225]({{es-issue}}164225) |
 | 53 | `rate` on native histograms {applies_to}`stack: ga 9.5+` {applies_to}`serverless: ga` | `rate(h[5m])` | Use `increase`: `histogram_quantile(0.99, sum by (job) (increase(h[5m])))` | [#152263]({{es-issue}}152263) |
-| 54 | `sort` or `sort_desc` below the top level | `sum(sort(x))` | Remove it. Sorting has no effect there | [#164227]({{es-issue}}164227) |
+| 54 | `sort` or `sort_desc` below the top level {applies_to}`stack: ga =9.6` | `sum(sort(x))` | Remove it. Sorting has no effect there | [#164227]({{es-issue}}164227) |
 | 55 | `step()`, `range()`, `start()`, `end()` ({{prom}}: `promql-experimental-functions` feature flag) | `time() - start()` | - | [#164228]({{es-issue}}164228) |
 :::
 
@@ -47,4 +47,5 @@ The functions in the [{{promql}} functions](/reference/query-languages/promql/fu
 | 57 | `histogram_count`, `histogram_sum`, or `histogram_avg` on classic buckets | `histogram_count(rate(x_bucket[5m]))` | An error. They accept only native histograms | No results | - |
 | 58 | `quantile_over_time` | `quantile_over_time(0.9, x[5m])` | Approximate, using t-digest | Exact, with linear interpolation | - |
 | 59 | `rate`, `increase` | `rate(x[5m])` | Computed over fixed time buckets, interpolated at bucket boundaries. Results can differ slightly | Extrapolated within each range window | - |
+| 60 | `sort` or `sort_desc` below a step that changes the values or the series, such as a function or an aggregation {applies_to}`stack: ga 9.7+` {applies_to}`serverless: ga` | `abs(sort(x))` | Series in input order | Series in the order `sort` gave them | [#164227]({{es-issue}}164227) |
 :::

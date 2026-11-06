@@ -32,7 +32,6 @@ import org.elasticsearch.xpack.esql.core.tree.NodeInfo;
 import org.elasticsearch.xpack.esql.core.tree.NodeStringMapper;
 import org.elasticsearch.xpack.esql.core.tree.Source;
 import org.elasticsearch.xpack.esql.core.type.DataType;
-import org.elasticsearch.xpack.esql.core.util.Holder;
 import org.elasticsearch.xpack.esql.expression.function.TimestampAware;
 import org.elasticsearch.xpack.esql.expression.function.TimestampBoundsAware;
 import org.elasticsearch.xpack.esql.expression.predicate.logical.And;
@@ -723,7 +722,6 @@ public class PromqlCommand extends UnaryPlan implements TelemetryAware, Timestam
                 );
             }
         });
-        Holder<Boolean> root = new Holder<>(true);
         p.forEachDown(lp -> {
             switch (lp) {
                 case Selector selector -> verifySelector(selector, failures);
@@ -745,16 +743,8 @@ public class PromqlCommand extends UnaryPlan implements TelemetryAware, Timestam
                 }
                 case MetadataManipulationFunction relabel -> verifyRelabelInputs(relabel, failures);
                 case PromqlFunctionCall functionCall -> {
-                    if (functionCall instanceof ResultOrderingFunction && root.get() == false) {
-                        failures.add(
-                            fail(
-                                lp,
-                                "[{}] is only supported at the top-level at this time [{}]",
-                                functionCall.functionName(),
-                                lp.sourceText()
-                            )
-                        );
-                    }
+                    // ok: sort and sort_desc below the top level pass their input through; AddPromqlResultOrder orders the
+                    // result where the order they give survives.
                 }
                 case ScalarFunction scalarFunction -> {
                     // ok
@@ -821,7 +811,6 @@ public class PromqlCommand extends UnaryPlan implements TelemetryAware, Timestam
                     fail(lp, "{} queries are not supported at this time [{}]", lp.getClass().getSimpleName(), lp.sourceText())
                 );
             }
-            root.set(false);
         });
 
         verifyMetadataManipulationPlacement(p, null, failures, typedMetadata);

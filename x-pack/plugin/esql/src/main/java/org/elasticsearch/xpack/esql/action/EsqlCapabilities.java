@@ -4256,6 +4256,12 @@ public class EsqlCapabilities {
         PROMQL_SORT(PROMQL_COMMAND_V0.isEnabled()),
 
         /**
+         * PromQL {@code sort} and {@code sort_desc} below the top level. They pass their input through, and the result keeps
+         * their order through steps that pass the values through unchanged.
+         */
+        PROMQL_SORT_BELOW_TOP_LEVEL(PROMQL_COMMAND_V0.isEnabled()),
+
+        /**
          * PromQL {@code label_replace} and {@code label_join} overwriting a label of a {@code by(...)} aggregation they are
          * applied over. Two series left with one label set fail the query, as in Prometheus.
          */
