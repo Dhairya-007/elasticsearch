@@ -1223,7 +1223,7 @@ required_capability: fix_ts_block_loader_passthrough_aliasing
 required_capability: promql_enable_timeseries_type
 PROMQL index=prometheus-k8s step=1h result=(unmapped.metric) | SORT result;
 
-result:double | step:datetime | _timeseries:_timeseries
+result:double | step:datetime | _timeseries:keyword
 ;
 
 unmapped_label
@@ -1234,7 +1234,7 @@ required_capability: fix_ts_block_loader_passthrough_aliasing
 required_capability: promql_enable_timeseries_type
 PROMQL index=prometheus-k8s step=1h result=(network.cost{unmapped.label="value"}) | SORT result;
 
-result:double | step:datetime | _timeseries:_timeseries
+result:double | step:datetime | _timeseries:keyword
 ;
 
 unmapped_metric_cross_series
@@ -1305,7 +1305,7 @@ required_capability: fix_ts_block_loader_passthrough_aliasing
 required_capability: promql_enable_timeseries_type
 PROMQL index=prometheus-k8s step=1h result=(rate(unmapped.metric[1h])) | SORT result;
 
-result:double | step:datetime | _timeseries:_timeseries
+result:double | step:datetime | _timeseries:keyword
 ;
 
 // nullify doesn't affect PROMQL's handling of unmapped fields inside the command.
@@ -2090,7 +2090,7 @@ required_capability: promql_enable_timeseries_type
 PROMQL index=prometheus-k8s step=1h result=(topk(2, network.total_bytes_in{cluster="prod"}))
 | SORT result DESC;
 
-result:double | step:datetime            | _timeseries:_timeseries
+result:double | step:datetime            | _timeseries:keyword
 10277.0       | 2024-05-10T01:00:00.000Z | "{""__name__"":""network.total_bytes_in"",""cluster"":""prod"",""pod"":""two"",""region"":[""eu"",""us""]}"
 9969.0        | 2024-05-10T01:00:00.000Z | "{""__name__"":""network.total_bytes_in"",""cluster"":""prod"",""pod"":""three"",""region"":[""eu"",""us""]}"
 ;
@@ -2105,7 +2105,7 @@ required_capability: promql_enable_timeseries_type
 PROMQL index=prometheus-k8s step=1h result=(topk(5, network.total_bytes_in{cluster="prod"}))
 | SORT result DESC;
 
-result:double | step:datetime            | _timeseries:_timeseries
+result:double | step:datetime            | _timeseries:keyword
 10277.0       | 2024-05-10T01:00:00.000Z | "{""__name__"":""network.total_bytes_in"",""cluster"":""prod"",""pod"":""two"",""region"":[""eu"",""us""]}"
 9969.0        | 2024-05-10T01:00:00.000Z | "{""__name__"":""network.total_bytes_in"",""cluster"":""prod"",""pod"":""three"",""region"":[""eu"",""us""]}"
 947.0         | 2024-05-10T01:00:00.000Z | "{""__name__"":""network.total_bytes_in"",""cluster"":""prod"",""pod"":""one"",""region"":[""eu"",""us""]}"
@@ -2124,7 +2124,7 @@ required_capability: promql_enable_timeseries_type
 PROMQL index=prometheus-k8s step=5m start="2024-05-10T00:20:00.000Z" end="2024-05-10T00:25:00.000Z" result=(topk(1, network.total_bytes_in{cluster="prod"}))
 | SORT step, result DESC;
 
-result:double | step:datetime            | _timeseries:_timeseries
+result:double | step:datetime            | _timeseries:keyword
 9969.0        | 2024-05-10T00:20:00.000Z | "{""__name__"":""network.total_bytes_in"",""cluster"":""prod"",""pod"":""three"",""region"":[""eu"",""us""]}"
 10277.0       | 2024-05-10T00:25:00.000Z | "{""__name__"":""network.total_bytes_in"",""cluster"":""prod"",""pod"":""two"",""region"":[""eu"",""us""]}"
 ;
@@ -2139,7 +2139,7 @@ required_capability: promql_enable_timeseries_type
 PROMQL index=prometheus-k8s step=1h result=(topk(0, network.total_bytes_in{cluster="prod"}))
 | SORT result DESC;
 
-result:double | step:datetime | _timeseries:_timeseries
+result:double | step:datetime | _timeseries:keyword
 ;
 
 // k far larger than any reasonable series count: still returns every series, still ranked. Note: k values near
@@ -2154,7 +2154,7 @@ required_capability: promql_enable_timeseries_type
 PROMQL index=prometheus-k8s step=1h result=(topk(100000, network.total_bytes_in{cluster="prod"}))
 | SORT result DESC;
 
-result:double | step:datetime            | _timeseries:_timeseries
+result:double | step:datetime            | _timeseries:keyword
 10277.0       | 2024-05-10T01:00:00.000Z | "{""__name__"":""network.total_bytes_in"",""cluster"":""prod"",""pod"":""two"",""region"":[""eu"",""us""]}"
 9969.0        | 2024-05-10T01:00:00.000Z | "{""__name__"":""network.total_bytes_in"",""cluster"":""prod"",""pod"":""three"",""region"":[""eu"",""us""]}"
 947.0         | 2024-05-10T01:00:00.000Z | "{""__name__"":""network.total_bytes_in"",""cluster"":""prod"",""pod"":""one"",""region"":[""eu"",""us""]}"
@@ -2171,7 +2171,7 @@ required_capability: fix_ts_block_loader_passthrough_aliasing
 required_capability: promql_enable_timeseries_type
 PROMQL index=prometheus-k8s step=1h result=(topk(2, network.total_bytes_in) by (pod));
 
-result:double | step:datetime            | _timeseries:_timeseries
+result:double | step:datetime            | _timeseries:keyword
 10797.0       | 2024-05-10T01:00:00.000Z | "{""__name__"":""network.total_bytes_in"",""cluster"":""qa"",""pod"":""three""}"
 10277.0       | 2024-05-10T01:00:00.000Z | "{""__name__"":""network.total_bytes_in"",""cluster"":""prod"",""pod"":""two"",""region"":[""eu"",""us""]}"
 9969.0        | 2024-05-10T01:00:00.000Z | "{""__name__"":""network.total_bytes_in"",""cluster"":""prod"",""pod"":""three"",""region"":[""eu"",""us""]}"
@@ -2206,7 +2206,7 @@ required_capability: promql_enable_timeseries_type
 PROMQL index=prometheus-k8s step=1h result=(bottomk(2, network.total_bytes_in{cluster="prod"}))
 | SORT result ASC;
 
-result:double | step:datetime            | _timeseries:_timeseries
+result:double | step:datetime            | _timeseries:keyword
 947.0         | 2024-05-10T01:00:00.000Z | "{""__name__"":""network.total_bytes_in"",""cluster"":""prod"",""pod"":""one"",""region"":[""eu"",""us""]}"
 9969.0        | 2024-05-10T01:00:00.000Z | "{""__name__"":""network.total_bytes_in"",""cluster"":""prod"",""pod"":""three"",""region"":[""eu"",""us""]}"
 ;
@@ -2221,7 +2221,7 @@ required_capability: promql_enable_timeseries_type
 PROMQL index=prometheus-k8s step=1h result=(bottomk(5, network.total_bytes_in{cluster="prod"}))
 | SORT result ASC;
 
-result:double | step:datetime            | _timeseries:_timeseries
+result:double | step:datetime            | _timeseries:keyword
 947.0         | 2024-05-10T01:00:00.000Z | "{""__name__"":""network.total_bytes_in"",""cluster"":""prod"",""pod"":""one"",""region"":[""eu"",""us""]}"
 9969.0        | 2024-05-10T01:00:00.000Z | "{""__name__"":""network.total_bytes_in"",""cluster"":""prod"",""pod"":""three"",""region"":[""eu"",""us""]}"
 10277.0       | 2024-05-10T01:00:00.000Z | "{""__name__"":""network.total_bytes_in"",""cluster"":""prod"",""pod"":""two"",""region"":[""eu"",""us""]}"
@@ -2240,7 +2240,7 @@ required_capability: promql_enable_timeseries_type
 PROMQL index=prometheus-k8s step=5m start="2024-05-10T00:20:00.000Z" end="2024-05-10T00:25:00.000Z" result=(bottomk(1, network.total_bytes_in{cluster="prod"}))
 | SORT step, result ASC;
 
-result:double | step:datetime            | _timeseries:_timeseries
+result:double | step:datetime            | _timeseries:keyword
 9969.0        | 2024-05-10T00:20:00.000Z | "{""__name__"":""network.total_bytes_in"",""cluster"":""prod"",""pod"":""three"",""region"":[""eu"",""us""]}"
 947.0         | 2024-05-10T00:25:00.000Z | "{""__name__"":""network.total_bytes_in"",""cluster"":""prod"",""pod"":""one"",""region"":[""eu"",""us""]}"
 ;
@@ -2255,7 +2255,7 @@ required_capability: promql_enable_timeseries_type
 PROMQL index=prometheus-k8s step=1h result=(bottomk(0, network.total_bytes_in{cluster="prod"}))
 | SORT result ASC;
 
-result:double | step:datetime | _timeseries:_timeseries
+result:double | step:datetime | _timeseries:keyword
 ;
 
 // `by (pod)` partitions the ranking by pod across ALL clusters, preserving the winning series' full identity.
@@ -2267,7 +2267,7 @@ required_capability: fix_ts_block_loader_passthrough_aliasing
 required_capability: promql_enable_timeseries_type
 PROMQL index=prometheus-k8s step=1h result=(bottomk(2, network.total_bytes_in) by (pod));
 
-result:double | step:datetime            | _timeseries:_timeseries
+result:double | step:datetime            | _timeseries:keyword
 947.0         | 2024-05-10T01:00:00.000Z | "{""__name__"":""network.total_bytes_in"",""cluster"":""prod"",""pod"":""one"",""region"":[""eu"",""us""]}"
 5187.0        | 2024-05-10T01:00:00.000Z | "{""__name__"":""network.total_bytes_in"",""cluster"":""staging"",""pod"":""two"",""region"":""us""}"
 6637.0        | 2024-05-10T01:00:00.000Z | "{""__name__"":""network.total_bytes_in"",""cluster"":""staging"",""pod"":""one"",""region"":""us""}"

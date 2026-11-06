@@ -34,6 +34,7 @@ import org.elasticsearch.xpack.esql.core.tree.Source;
 import org.elasticsearch.xpack.esql.core.type.DataType;
 import org.elasticsearch.xpack.esql.expression.function.TimestampAware;
 import org.elasticsearch.xpack.esql.expression.function.TimestampBoundsAware;
+import org.elasticsearch.xpack.esql.expression.function.scalar.convert.ToString;
 import org.elasticsearch.xpack.esql.expression.predicate.logical.And;
 import org.elasticsearch.xpack.esql.expression.predicate.nulls.IsNotNull;
 import org.elasticsearch.xpack.esql.expression.predicate.operator.comparison.GreaterThanOrEqual;
@@ -354,14 +355,6 @@ public class PromqlCommand extends UnaryPlan implements TelemetryAware, Timestam
         return timeseriesId;
     }
 
-    /**
-     * The type of the {@code _timeseries} column the command exposes: typed metadata wherever the type is enabled, whatever
-     * the participating nodes read - a keyword read on an older node is cast to it. Keyword where the type is disabled.
-     */
-    public static DataType timeseriesType() {
-        return EsqlCapabilities.Cap.ENABLE_TIMESERIES_DATA_TYPE.isEnabled() ? DataType.TIMESERIES_DATA_TYPE : DataType.KEYWORD;
-    }
-
     public ReferenceAttribute valueAttribute() {
         return new ReferenceAttribute(source(), null, valueColumnName, DataType.DOUBLE, Nullability.FALSE, valueId, false);
     }
@@ -390,7 +383,8 @@ public class PromqlCommand extends UnaryPlan implements TelemetryAware, Timestam
                             source(),
                             null,
                             MetadataAttribute.TIMESERIES,
-                            timeseriesType(),
+                            // typed metadata is internal: the command exposes its keyword form
+                            DataType.KEYWORD,
                             Nullability.TRUE,
                             timeseriesId,
                             false
@@ -517,7 +511,7 @@ public class PromqlCommand extends UnaryPlan implements TelemetryAware, Timestam
         if (plan instanceof VectorBinaryOperator op && (plan instanceof VectorBinarySet) == false) {
             VectorMatch match = op.match();
             if (match.filter() != VectorMatch.Filter.NONE || match.grouping() != VectorMatch.Joining.NONE) {
-                return finish(emitFinalProjection(op.translateAsLeftJoin(context).plan(), false), false);
+                return finish(emitFinalProjection(op.translateAsLeftJoin(context).plan(), false, context), false);
             }
         }
 
@@ -527,7 +521,7 @@ public class PromqlCommand extends UnaryPlan implements TelemetryAware, Timestam
         if (branches.size() == 1) {
             IntermediateResult result = context.translateIntermediate(plan, stepId(), valueId());
             boolean constant = result.kind().constant;
-            return finish(emitFinalProjection(result.plan(), constant), constant);
+            return finish(emitFinalProjection(result.plan(), constant, context), constant);
         }
         // Compile every branch as its own module (own step/value ids, own shifted evaluation timestamp), then link.
         LogicalPlan union = VectorBinarySet.translateUnion(
@@ -535,7 +529,7 @@ public class PromqlCommand extends UnaryPlan implements TelemetryAware, Timestam
             branches,
             branches.stream().map(b -> context.translateIntermediate(b, new NameId(), new NameId())).toList()
         );
-        return finish(emitFinalProjection(union, false), false);
+        return finish(emitFinalProjection(union, false, context), false);
     }
 
     /** Keeps only steps within the query range; steps are anchored at {@code start} and offset-independent. */
@@ -563,9 +557,10 @@ public class PromqlCommand extends UnaryPlan implements TelemetryAware, Timestam
     /**
      * Projects the command output. Value and step bind to the finished table's columns by name; every label the command
      * declares, and its {@code _timeseries}, is a reference aliased to its declared name and id. A constant table carries no
-     * labels.
+     * labels. Typed {@code _timeseries} stays internal: it binds under an id of its own and the command exposes its keyword
+     * form.
      */
-    private LogicalPlan emitFinalProjection(LogicalPlan plan, boolean constant) {
+    private LogicalPlan emitFinalProjection(LogicalPlan plan, boolean constant, TranslationContext context) {
         var lookupMap = new HashMap<String, Attribute>();
         for (var attr : plan.output()) {
             lookupMap.put(attr.name(), attr);
@@ -583,11 +578,24 @@ public class PromqlCommand extends UnaryPlan implements TelemetryAware, Timestam
         var projected = new ArrayList<NamedExpression>(output());
         var evals = new ArrayList<Alias>();
         List<Attribute> tsIdentity = promqlPlan().output();
+        boolean typed = usesTimeSeriesMetadata(context.analyzer());
+        Alias rendered = null;
         for (int i = 0; i < projected.size(); i++) {
             var attr = projected.get(i).toAttribute();
             // the value and step lead the declared output, then the result's tsIdentity
             if (i >= 2 && constant == false) {
                 var label = UnresolvedPromqlLabelRef.of(promqlPlan().source(), tsIdentity.get(i - 2));
+                if (typed && label.isMetadata()) {
+                    Alias metadata = new Alias(promqlPlan().source(), attr.name(), label);
+                    rendered = new Alias(
+                        promqlPlan().source(),
+                        attr.name(),
+                        new ToString(promqlPlan().source(), metadata.toAttribute(), context.configuration()),
+                        attr.id()
+                    );
+                    projected.set(i, metadata);
+                    continue;
+                }
                 projected.set(i, new Alias(promqlPlan().source(), attr.name(), label, attr.id()));
                 continue;
             }
@@ -610,7 +618,17 @@ public class PromqlCommand extends UnaryPlan implements TelemetryAware, Timestam
         if (evals.isEmpty() == false) {
             plan = new Eval(source(), plan, evals);
         }
-        return new Project(source(), plan, projected);
+        plan = new Project(source(), plan, projected);
+        if (rendered == null) {
+            return plan;
+        }
+        plan = new Eval(source(), plan, List.of(rendered));
+        // in the declared order: the Eval appends the rendered column
+        var exposed = new ArrayList<NamedExpression>(projected.size());
+        for (NamedExpression projection : projected) {
+            exposed.add(projection.name().equals(rendered.name()) ? rendered.toAttribute() : projection.toAttribute());
+        }
+        return new Project(source(), plan, exposed);
     }
 
     /**
@@ -1100,12 +1118,12 @@ public class PromqlCommand extends UnaryPlan implements TelemetryAware, Timestam
             return; // a scalar operand is illegal whatever the metadata, see verifySetOperator
         }
         boolean storesName = storesMetricName();
-        List<UnresolvedPromqlAttribute> opaque = new ArrayList<>();
+        List<UnresolvedPromqlLabelRef> opaque = new ArrayList<>();
         List<LogicalPlan> opaqueBranches = new ArrayList<>();
         boolean labelledConcrete = false;
         boolean labellessConcrete = false;
         for (LogicalPlan branch : branches) {
-            UnresolvedPromqlAttribute metadata = PromqlLabels.metadataLabel(branch.output());
+            UnresolvedPromqlLabelRef metadata = PromqlLabels.metadataLabel(branch.output());
             if (metadata != null) {
                 opaque.add(metadata);
                 opaqueBranches.add(branch);
@@ -1134,9 +1152,9 @@ public class PromqlCommand extends UnaryPlan implements TelemetryAware, Timestam
 
     private static boolean keywordUnionAgrees(
         boolean storesName,
-        UnresolvedPromqlAttribute left,
+        UnresolvedPromqlLabelRef left,
         LogicalPlan leftBranch,
-        UnresolvedPromqlAttribute right,
+        UnresolvedPromqlLabelRef right,
         LogicalPlan rightBranch
     ) {
         boolean leftKeeps = storesName && left.unset().contains(LabelMatcher.NAME) == false;

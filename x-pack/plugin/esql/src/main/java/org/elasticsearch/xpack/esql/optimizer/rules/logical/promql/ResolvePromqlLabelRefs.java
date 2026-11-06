@@ -421,18 +421,8 @@ public final class ResolvePromqlLabelRefs extends ParameterizedRule<LogicalPlan,
             for (NamedExpression projection : node.projections()) {
                 if (projection instanceof Alias exposed && exposed.child() instanceof UnresolvedPromqlLabelRef ref) {
                     Attribute column = binding.column(ref);
-                    if (ref.isMetadata() && column.dataType() == DataType.KEYWORD && PromqlCommand.timeseriesType() != DataType.KEYWORD) {
-                        // a keyword read where the command exposes typed metadata
-                        Alias alias = new Alias(
-                            ref.source(),
-                            exposed.name(),
-                            new ToTimeSeries(ref.source(), column),
-                            exposed.id()
-                        );
-                        aliases.add(alias);
-                        column = alias.toAttribute();
-                    } else if (column.id().equals(exposed.id()) == false || column.name().equals(exposed.name()) == false) {
-                        // Tracing may name the column _timeseries$...; rename to the declared public name for KEEP/API.
+                    if (column.id().equals(exposed.id()) == false || column.name().equals(exposed.name()) == false) {
+                        // PathTrace may name the column _timeseries$...; rename to the declared public name for KEEP/API.
                         Alias alias = new Alias(column.source(), exposed.name(), column, exposed.id());
                         aliases.add(alias);
                         column = alias.toAttribute();

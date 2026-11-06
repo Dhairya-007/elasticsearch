@@ -20,7 +20,7 @@ PROMQL index=otel-metrics step=1h result=(sum without (cpu) (metrics.cpu_time))
 | KEEP result, _timeseries, has_cpu
 | SORT result;
 
-result:double | _timeseries:_timeseries                        | has_cpu:boolean
+result:double | _timeseries:keyword                        | has_cpu:boolean
 3.0           | "{""attributes.state"":""idle""}"    | false
 15.0          | "{""attributes.state"":""active""}"  | false
 ;
@@ -39,7 +39,7 @@ PROMQL index=otel-metrics step=1h result=(sum without (state) (metrics.cpu_time)
 | KEEP result, _timeseries, has_state
 | SORT result;
 
-result:double | _timeseries:_timeseries                        | has_state:boolean
+result:double | _timeseries:keyword                        | has_state:boolean
 6.0           | "{""attributes.cpu"":""system""}"    | false
 12.0          | "{""attributes.cpu"":""user""}"      | false
 ;
@@ -55,7 +55,7 @@ required_capability: promql_enable_timeseries_type
 PROMQL index=otel-metrics step=1h result=(sum without (cpu) (metrics.cpu_time))
 | SORT result;
 
-result:double | step:datetime            | _timeseries:_timeseries
+result:double | step:datetime            | _timeseries:keyword
 3.0           | 2024-05-10T01:00:00.000Z | "{""attributes.state"":""idle""}"
 15.0          | 2024-05-10T01:00:00.000Z | "{""attributes.state"":""active""}"
 ;
@@ -71,7 +71,7 @@ required_capability: promql_enable_timeseries_type
 PROMQL index=otel-metrics step=1h result=(sum without (state) (metrics.cpu_time))
 | SORT result;
 
-result:double | step:datetime            | _timeseries:_timeseries
+result:double | step:datetime            | _timeseries:keyword
 6.0           | 2024-05-10T01:00:00.000Z | "{""attributes.cpu"":""system""}"
 12.0          | 2024-05-10T01:00:00.000Z | "{""attributes.cpu"":""user""}"
 ;
@@ -106,7 +106,7 @@ PROMQL index=prom-metrics step=1h result=(sum without (cpu) (metrics.cpu_time))
 | KEEP result, _timeseries, has_cpu
 | SORT result;
 
-result:double | _timeseries:_timeseries                     | has_cpu:boolean
+result:double | _timeseries:keyword                     | has_cpu:boolean
 3.0           | "{""state"":""idle""}"     | false
 15.0          | "{""state"":""active""}"   | false
 ;
@@ -125,7 +125,7 @@ PROMQL index=prom-metrics step=1h result=(sum without (state) (metrics.cpu_time)
 | KEEP result, _timeseries, has_state
 | SORT result;
 
-result:double | _timeseries:_timeseries                     | has_state:boolean
+result:double | _timeseries:keyword                     | has_state:boolean
 6.0           | "{""cpu"":""system""}"     | false
 12.0          | "{""cpu"":""user""}"       | false
 ;
@@ -141,7 +141,7 @@ required_capability: promql_enable_timeseries_type
 PROMQL index=prom-metrics step=1h result=(sum without (cpu) (metrics.cpu_time))
 | SORT result;
 
-result:double | step:datetime            | _timeseries:_timeseries
+result:double | step:datetime            | _timeseries:keyword
 3.0           | 2024-05-10T01:00:00.000Z | "{""state"":""idle""}"
 15.0          | 2024-05-10T01:00:00.000Z | "{""state"":""active""}"
 ;
@@ -157,7 +157,7 @@ required_capability: promql_enable_timeseries_type
 PROMQL index=prom-metrics step=1h result=(sum without (state) (metrics.cpu_time))
 | SORT result;
 
-result:double | step:datetime            | _timeseries:_timeseries
+result:double | step:datetime            | _timeseries:keyword
 6.0           | 2024-05-10T01:00:00.000Z | "{""cpu"":""system""}"
 12.0          | 2024-05-10T01:00:00.000Z | "{""cpu"":""user""}"
 ;

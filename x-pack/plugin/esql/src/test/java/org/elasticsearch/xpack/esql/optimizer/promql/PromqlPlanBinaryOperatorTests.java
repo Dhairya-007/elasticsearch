@@ -699,6 +699,17 @@ public class PromqlPlanBinaryOperatorTests extends AbstractPromqlPlanOptimizerTe
         assertEquals(typedTimeSeriesMetadata() ? Set.of() : Set.of(LabelMatcher.NAME), viewExclusions(plan));
     }
 
+    /** Typed metadata stays inside the plan: the command exposes {@code _timeseries} in its keyword form either way. */
+    public void testTimeseriesLeavesTheCommandAsKeyword() {
+        var plan = planPromql("PROMQL index=k8s step=5m result=(topk(1, network.eth0.tx) * 2)");
+        Attribute timeseries = plan.output()
+            .stream()
+            .filter(attribute -> attribute.name().equals(MetadataAttribute.TIMESERIES))
+            .findFirst()
+            .orElseThrow();
+        assertEquals(DataType.KEYWORD, timeseries.dataType());
+    }
+
     /**
      * A {@code group_left} label over an aggregated opaque "many" side: typed metadata leaves the label out of the result's
      * metadata, keyword metadata keeps it there, as before.

@@ -15,7 +15,7 @@ required_capability: promql_enable_timeseries_type
 PROMQL index=prometheus-k8s step=1h result=(limitk(5, network.total_bytes_in{cluster="prod"}))
 | SORT result;
 
-result:double | step:datetime            | _timeseries:_timeseries
+result:double | step:datetime            | _timeseries:keyword
 947.0         | 2024-05-10T01:00:00.000Z | "{""__name__"":""network.total_bytes_in"",""cluster"":""prod"",""pod"":""one"",""region"":[""eu"",""us""]}"
 9969.0        | 2024-05-10T01:00:00.000Z | "{""__name__"":""network.total_bytes_in"",""cluster"":""prod"",""pod"":""three"",""region"":[""eu"",""us""]}"
 10277.0       | 2024-05-10T01:00:00.000Z | "{""__name__"":""network.total_bytes_in"",""cluster"":""prod"",""pod"":""two"",""region"":[""eu"",""us""]}"
@@ -31,7 +31,7 @@ required_capability: promql_enable_timeseries_type
 PROMQL index=prometheus-k8s step=1h result=(limitk(3, network.total_bytes_in{cluster="prod"}))
 | SORT result;
 
-result:double | step:datetime            | _timeseries:_timeseries
+result:double | step:datetime            | _timeseries:keyword
 947.0         | 2024-05-10T01:00:00.000Z | "{""__name__"":""network.total_bytes_in"",""cluster"":""prod"",""pod"":""one"",""region"":[""eu"",""us""]}"
 9969.0        | 2024-05-10T01:00:00.000Z | "{""__name__"":""network.total_bytes_in"",""cluster"":""prod"",""pod"":""three"",""region"":[""eu"",""us""]}"
 10277.0       | 2024-05-10T01:00:00.000Z | "{""__name__"":""network.total_bytes_in"",""cluster"":""prod"",""pod"":""two"",""region"":[""eu"",""us""]}"
@@ -47,7 +47,7 @@ required_capability: promql_enable_timeseries_type
 PROMQL index=prometheus-k8s step=1h result=(limitk(0, network.total_bytes_in{cluster="prod"}))
 | SORT result;
 
-result:double | step:datetime | _timeseries:_timeseries
+result:double | step:datetime | _timeseries:keyword
 ;
 
 // k < series count: two arbitrary series from three. ES returns the first two in tsid (storage) order:
@@ -62,7 +62,7 @@ required_capability: promql_enable_timeseries_type
 PROMQL index=prometheus-k8s step=1h result=(limitk(2, network.total_bytes_in{cluster="prod"}))
 | SORT result;
 
-result:double | step:datetime            | _timeseries:_timeseries
+result:double | step:datetime            | _timeseries:keyword
 947.0         | 2024-05-10T01:00:00.000Z | "{""__name__"":""network.total_bytes_in"",""cluster"":""prod"",""pod"":""one"",""region"":[""eu"",""us""]}"
 10277.0       | 2024-05-10T01:00:00.000Z | "{""__name__"":""network.total_bytes_in"",""cluster"":""prod"",""pod"":""two"",""region"":[""eu"",""us""]}"
 ;
@@ -80,7 +80,7 @@ required_capability: promql_enable_timeseries_type
 PROMQL index=prometheus-k8s step=5m start="2024-05-10T00:20:00.000Z" end="2024-05-10T00:25:00.000Z" result=(limitk(5, network.total_bytes_in{cluster="prod"}))
 | SORT step, result;
 
-result:double | step:datetime            | _timeseries:_timeseries
+result:double | step:datetime            | _timeseries:keyword
 9969.0        | 2024-05-10T00:20:00.000Z | "{""__name__"":""network.total_bytes_in"",""cluster"":""prod"",""pod"":""three"",""region"":[""eu"",""us""]}"
 947.0         | 2024-05-10T00:25:00.000Z | "{""__name__"":""network.total_bytes_in"",""cluster"":""prod"",""pod"":""one"",""region"":[""eu"",""us""]}"
 10277.0       | 2024-05-10T00:25:00.000Z | "{""__name__"":""network.total_bytes_in"",""cluster"":""prod"",""pod"":""two"",""region"":[""eu"",""us""]}"
@@ -98,7 +98,7 @@ required_capability: promql_enable_timeseries_type
 PROMQL index=prometheus-k8s step=1h result=(limitk(5, network.total_bytes_in) by (pod))
 | SORT result;
 
-result:double | step:datetime            | _timeseries:_timeseries
+result:double | step:datetime            | _timeseries:keyword
 947.0         | 2024-05-10T01:00:00.000Z | "{""__name__"":""network.total_bytes_in"",""cluster"":""prod"",""pod"":""one"",""region"":[""eu"",""us""]}"
 5187.0        | 2024-05-10T01:00:00.000Z | "{""__name__"":""network.total_bytes_in"",""cluster"":""staging"",""pod"":""two"",""region"":""us""}"
 6637.0        | 2024-05-10T01:00:00.000Z | "{""__name__"":""network.total_bytes_in"",""cluster"":""staging"",""pod"":""one"",""region"":""us""}"

@@ -936,7 +936,7 @@ PROMQL index=prometheus-k8s step=10m r=(network.eth0.tx / on (cluster) group_lef
 | KEEP r, _timeseries
 | SORT TO_STRING(_timeseries);
 
-r:double            | _timeseries:_timeseries
+r:double            | _timeseries:keyword
 0.4225206611570248  | "{""cluster"":""prod"",""pod"":""one"",""region"":[""eu"",""us""]}"
 0.37293388429752067 | "{""cluster"":""prod"",""pod"":""three"",""region"":[""eu"",""us""]}"
 0.30785123966942146 | "{""cluster"":""prod"",""pod"":""two"",""region"":[""eu"",""us""]}"
@@ -960,7 +960,7 @@ PROMQL index=prometheus-k8s step=10m r=(sum by (cluster) (network.eth0.tx) / on 
 | KEEP r, _timeseries
 | SORT TO_STRING(_timeseries);
 
-r:double           | _timeseries:_timeseries
+r:double           | _timeseries:keyword
 2.4272727272727272 | "{""cluster"":""prod"",""pod"":""one"",""region"":[""eu"",""us""]}"
 2.894308943089431  | "{""cluster"":""prod"",""pod"":""three"",""region"":[""eu"",""us""]}"
 6.716981132075472  | "{""cluster"":""prod"",""pod"":""two"",""region"":[""eu"",""us""]}"
@@ -983,7 +983,7 @@ PROMQL index=prometheus-k8s step=10m r=(network.eth0.tx / on (cluster) group_lef
 | KEEP r, region, _timeseries
 | SORT TO_STRING(_timeseries);
 
-r:double            | region:keyword | _timeseries:_timeseries
+r:double            | region:keyword | _timeseries:keyword
 0.25535055350553504 | us             | "{""cluster"":""staging"",""pod"":""one""}"
 0.33062730627306275 | us             | "{""cluster"":""staging"",""pod"":""three""}"
 0.34833948339483395 | us             | "{""cluster"":""staging"",""pod"":""two""}"
@@ -1001,7 +1001,7 @@ PROMQL index=prometheus-k8s step=10m r=(network.eth0.tx{cluster="prod"} / on (cl
 | KEEP r, region, _timeseries
 | SORT TO_STRING(_timeseries);
 
-r:double           | region:keyword | _timeseries:_timeseries
+r:double           | region:keyword | _timeseries:keyword
 0.9295454545454546 | null           | "{""cluster"":""prod"",""pod"":""one""}"
 0.978319783197832  | null           | "{""cluster"":""prod"",""pod"":""three""}"
 1.8742138364779874 | null           | "{""cluster"":""prod"",""pod"":""two""}"
@@ -1021,7 +1021,7 @@ PROMQL index=prometheus-k8s step=10m r=(network.eth0.tx / ignoring (pod, region)
 | KEEP r, _timeseries
 | SORT TO_STRING(_timeseries);
 
-r:double            | _timeseries:_timeseries
+r:double            | _timeseries:keyword
 0.4225206611570248  | "{""cluster"":""prod"",""pod"":""one"",""region"":[""eu"",""us""]}"
 0.37293388429752067 | "{""cluster"":""prod"",""pod"":""three"",""region"":[""eu"",""us""]}"
 0.30785123966942146 | "{""cluster"":""prod"",""pod"":""two"",""region"":[""eu"",""us""]}"
@@ -1047,7 +1047,7 @@ PROMQL index=prometheus-k8s step=10m r=(network.eth0.tx / ignoring (pod, region)
 | KEEP r, region, _timeseries
 | SORT TO_STRING(_timeseries);
 
-r:double            | region:keyword | _timeseries:_timeseries
+r:double            | region:keyword | _timeseries:keyword
 0.25535055350553504 | us             | "{""cluster"":""staging"",""pod"":""one""}"
 0.33062730627306275 | us             | "{""cluster"":""staging"",""pod"":""three""}"
 0.34833948339483395 | us             | "{""cluster"":""staging"",""pod"":""two""}"
@@ -1064,7 +1064,7 @@ PROMQL index=prometheus-k8s step=10m r=(network.eth0.tx{cluster="prod"} >= ignor
 | KEEP r, _timeseries
 | SORT TO_STRING(_timeseries);
 
-r:double | _timeseries:_timeseries
+r:double | _timeseries:keyword
 409.0    | "{""__name__"":""network.eth0.tx"",""cluster"":""prod"",""pod"":""one""}"
 361.0    | "{""__name__"":""network.eth0.tx"",""cluster"":""prod"",""pod"":""three""}"
 298.0    | "{""__name__"":""network.eth0.tx"",""cluster"":""prod"",""pod"":""two""}"
@@ -1080,7 +1080,7 @@ PROMQL index=prometheus-k8s step=10m r=(network.eth0.tx{cluster="prod"} >= bool 
 | KEEP r, _timeseries
 | SORT TO_STRING(_timeseries);
 
-r:double | _timeseries:_timeseries
+r:double | _timeseries:keyword
 1.0      | "{""cluster"":""prod"",""pod"":""one""}"
 1.0      | "{""cluster"":""prod"",""pod"":""three""}"
 1.0      | "{""cluster"":""prod"",""pod"":""two""}"
@@ -1096,7 +1096,7 @@ PROMQL index=prometheus-k8s step=10m r=(network.eth0.tx{cluster="prod"} > on (cl
 | KEEP r, _timeseries
 | SORT TO_STRING(_timeseries);
 
-r:double | _timeseries:_timeseries
+r:double | _timeseries:keyword
 409.0    | "{""__name__"":""network.eth0.tx"",""cluster"":""prod"",""pod"":""one"",""region"":[""eu"",""us""]}"
 361.0    | "{""__name__"":""network.eth0.tx"",""cluster"":""prod"",""pod"":""three"",""region"":[""eu"",""us""]}"
 298.0    | "{""__name__"":""network.eth0.tx"",""cluster"":""prod"",""pod"":""two"",""region"":[""eu"",""us""]}"
@@ -1112,7 +1112,7 @@ PROMQL index=prometheus-k8s step=10m r=(network.eth0.tx{cluster="prod"} > bool o
 | KEEP r, _timeseries
 | SORT TO_STRING(_timeseries);
 
-r:double | _timeseries:_timeseries
+r:double | _timeseries:keyword
 0.0      | "{""cluster"":""prod"",""pod"":""one"",""region"":[""eu"",""us""]}"
 0.0      | "{""cluster"":""prod"",""pod"":""three"",""region"":[""eu"",""us""]}"
 0.0      | "{""cluster"":""prod"",""pod"":""two"",""region"":[""eu"",""us""]}"
@@ -1127,7 +1127,7 @@ PROMQL index=prometheus-k8s step=10m r=(network.eth0.tx{cluster="prod"} > 0)
 | KEEP r, _timeseries
 | SORT TO_STRING(_timeseries);
 
-r:double | _timeseries:_timeseries
+r:double | _timeseries:keyword
 409.0    | "{""__name__"":""network.eth0.tx"",""cluster"":""prod"",""pod"":""one"",""region"":[""eu"",""us""]}"
 361.0    | "{""__name__"":""network.eth0.tx"",""cluster"":""prod"",""pod"":""three"",""region"":[""eu"",""us""]}"
 298.0    | "{""__name__"":""network.eth0.tx"",""cluster"":""prod"",""pod"":""two"",""region"":[""eu"",""us""]}"
@@ -1142,7 +1142,7 @@ PROMQL index=prometheus-k8s step=10m r=(network.eth0.tx{cluster="prod"} > bool 0
 | KEEP r, _timeseries
 | SORT TO_STRING(_timeseries);
 
-r:double | _timeseries:_timeseries
+r:double | _timeseries:keyword
 1.0      | "{""cluster"":""prod"",""pod"":""one"",""region"":[""eu"",""us""]}"
 1.0      | "{""cluster"":""prod"",""pod"":""three"",""region"":[""eu"",""us""]}"
 1.0      | "{""cluster"":""prod"",""pod"":""two"",""region"":[""eu"",""us""]}"
@@ -1526,7 +1526,7 @@ PROMQL index=prometheus-k8s step=10m result=(label_replace(network.eth0.tx / on 
 | KEEP result, dst, region, _timeseries
 | SORT dst;
 
-result:double       | dst:keyword | region:keyword | _timeseries:_timeseries
+result:double       | dst:keyword | region:keyword | _timeseries:keyword
 0.25535055350553504 | one         | us             | "{""cluster"":""staging"",""pod"":""one""}"
 0.33062730627306275 | three       | us             | "{""cluster"":""staging"",""pod"":""three""}"
 0.34833948339483395 | two         | us             | "{""cluster"":""staging"",""pod"":""two""}"
@@ -1596,7 +1596,7 @@ PROMQL index=prometheus-k8s step=10m result=(topk(1, network.eth0.tx{cluster="pr
 | WHERE step == "2024-05-10T00:10:00.000Z"
 | KEEP result, _timeseries;
 
-result:double | _timeseries:_timeseries
+result:double | _timeseries:keyword
 179960.0      | "{""cluster"":""prod"",""pod"":""one"",""region"":[""eu"",""us""]}"
 ;
 
