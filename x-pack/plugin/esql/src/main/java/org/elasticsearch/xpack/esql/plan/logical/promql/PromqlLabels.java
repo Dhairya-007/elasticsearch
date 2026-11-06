@@ -18,6 +18,7 @@ import org.elasticsearch.xpack.esql.plan.logical.LogicalPlan;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 
 /**
  * Shared naming conventions for PromQL labels represented as ES|QL fields.
@@ -69,7 +70,10 @@ public final class PromqlLabels {
 
     /** Column name for metadata after applying unset (e.g. _timeseries$pod after without(pod)). */
     public static String metadataLabelName(Set<String> unset) {
-        return MetadataAttribute.TIMESERIES + (unset.isEmpty() ? "" : "$" + String.join("$", new TreeSet<>(unset)));
+        String suffix = new TreeSet<>(unset).stream()
+            .map(label -> label.replace("\\", "\\\\").replace("$", "\\$"))
+            .collect(Collectors.joining("$"));
+        return MetadataAttribute.TIMESERIES + (unset.isEmpty() ? "" : "$" + suffix);
     }
 
     /**
