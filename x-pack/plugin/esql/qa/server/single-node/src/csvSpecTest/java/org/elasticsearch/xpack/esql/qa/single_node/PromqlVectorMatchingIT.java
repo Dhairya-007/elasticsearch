@@ -196,7 +196,7 @@ public class PromqlVectorMatchingIT extends RestEsqlTestCase {
 
     /**
      * {@code or on(cluster)} keeps every left series and adds the right series of the clusters the left one lacks: the same
-     * rows as a default {@code or} whose right operand leaves out the left one's clusters.
+     * rows as a default {@code or} whose right operand leaves out the left one's clusters. Keyword metadata rejects it.
      */
     public void testOrWithOnKeepsUnmatchedRightSeries() throws IOException {
         requirePromqlUnion();
@@ -205,11 +205,14 @@ public class PromqlVectorMatchingIT extends RestEsqlTestCase {
             hasCapabilities(adminClient(), List.of(EsqlCapabilities.Cap.PROMQL_SET_OPERATOR_MATCHING.capabilityName()))
         );
         String keep = " | KEEP result, cluster, step | SORT cluster, step";
-        List<List<Object>> matched = values(
-            "PROMQL index=k8s step=10m result=(sum by (cluster) (network.eth0.tx{cluster=\"prod\"}) "
-                + "or on (cluster) sum by (cluster) (network.eth0.rx))"
-                + keep
-        );
+        String orOn = "PROMQL index=k8s step=10m result=(sum by (cluster) (network.eth0.tx{cluster=\"prod\"}) "
+            + "or on (cluster) sum by (cluster) (network.eth0.rx))"
+            + keep;
+        if (hasCapabilities(adminClient(), List.of(EsqlCapabilities.Cap.PROMQL_ENABLE_TIMESERIES_TYPE.capabilityName())) == false) {
+            assertPromqlError(orOn, "set operator [or] with on/ignoring requires typed time-series metadata");
+            return;
+        }
+        List<List<Object>> matched = values(orOn);
         List<List<Object>> disjoint = values(
             "PROMQL index=k8s step=10m result=(sum by (cluster) (network.eth0.tx{cluster=\"prod\"}) "
                 + "or sum by (cluster) (network.eth0.rx{cluster!=\"prod\"}))"
