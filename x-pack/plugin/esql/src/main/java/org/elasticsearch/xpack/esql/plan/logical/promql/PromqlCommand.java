@@ -802,6 +802,14 @@ public class PromqlCommand extends UnaryPlan implements TelemetryAware, Timestam
                             failures.add(fail(comp, "Comparisons [{}] between scalars must use the BOOL modifier", comp.op()));
                         }
                     }
+                    if (binaryOperator.match().filter() == VectorMatch.Filter.ON
+                        && (binaryOperator.match().filterLabels().contains(LabelMatcher.NAME)
+                            || binaryOperator.match().groupingLabels().contains(LabelMatcher.NAME))
+                        && storesMetricName() == false) {
+                        // Without a stored __name__ every series reads it as absent, so on(__name__) would match the series of
+                        // different metrics, which Prometheus keeps apart.
+                        failures.add(fail(lp, "matching on __name__ requires metrics that store a __name__ label [{}]", lp.sourceText()));
+                    }
                     if (binaryOperator instanceof VectorBinarySet setOp) {
                         verifySetOperator(failures, setOp, typedMetadata, topLevelUnions.contains(setOp));
                     }
@@ -1089,7 +1097,7 @@ public class PromqlCommand extends UnaryPlan implements TelemetryAware, Timestam
         if (branches.stream().anyMatch(PromqlPlan::returnsScalar)) {
             return; // a scalar operand is illegal whatever the metadata, see verifySetOperator
         }
-        boolean storesName = child().output().stream().anyMatch(field -> LabelMatcher.NAME.equals(PromqlLabels.labelName(field)));
+        boolean storesName = storesMetricName();
         List<UnresolvedPromqlAttribute> opaque = new ArrayList<>();
         List<LogicalPlan> opaqueBranches = new ArrayList<>();
         boolean labelledConcrete = false;
@@ -1158,6 +1166,11 @@ public class PromqlCommand extends UnaryPlan implements TelemetryAware, Timestam
             }
         });
         return metrics;
+    }
+
+    /** Whether the source stores the metric name as a {@code __name__} label, as Prometheus remote write does. */
+    private boolean storesMetricName() {
+        return child().output().stream().anyMatch(field -> LabelMatcher.NAME.equals(PromqlLabels.labelName(field)));
     }
 
     /** The {@code or} operators of the chain at the root of {@code p}, which translate as one top-level union. */

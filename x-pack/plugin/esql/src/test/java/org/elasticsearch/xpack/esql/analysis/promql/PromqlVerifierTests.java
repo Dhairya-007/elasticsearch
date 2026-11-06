@@ -313,6 +313,20 @@ public class PromqlVerifierTests extends ESTestCase {
         }
     }
 
+    /** Without a stored __name__ every series reads it as absent, so matching on it would pair different metrics. */
+    public void testMatchingOnMetricNameNeedsAStoredName() {
+        for (String query : List.of(
+            "network.bytes_in or on (__name__, host) network.connections",
+            "network.bytes_in / on (__name__, host) network.connections",
+            "network.bytes_in * on (host) group_left (__name__) network.connections"
+        )) {
+            tsdb.error(
+                "PROMQL index=test step=5m " + query,
+                containsString("matching on __name__ requires metrics that store a __name__ label")
+            );
+        }
+    }
+
     public void testUnionBetweenInstantVectorsIsSupported() {
         // Top-level `or` (UNION) between two instant vectors is supported.
         assertTrue(tsdb.query("PROMQL index=test step=5m network.bytes_in or network.connections").resolved());
@@ -331,7 +345,6 @@ public class PromqlVerifierTests extends ESTestCase {
             "sum by (host) (network.bytes_in) or on () vector(1)",
             "sum by (host, metricset) (network.bytes_in) or on (host) sum by (host) (network.connections)",
             "network.bytes_in or on (host) network.connections",
-            "network.bytes_in or on (__name__, host) network.connections",
             "network.bytes_in or ignoring (host) network.connections"
         )) {
             assertSetOperatorNeedsTypedMetadata(query, "set operator [or] with on/ignoring requires typed time-series metadata");
