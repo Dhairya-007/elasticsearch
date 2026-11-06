@@ -50,6 +50,7 @@ import org.elasticsearch.xpack.esql.plan.logical.promql.operator.VectorBinaryCom
 import org.elasticsearch.xpack.esql.plan.logical.promql.operator.VectorBinaryOperator;
 import org.elasticsearch.xpack.esql.plan.logical.promql.operator.VectorBinarySet;
 import org.elasticsearch.xpack.esql.plan.logical.promql.operator.VectorMatch;
+import org.elasticsearch.xpack.esql.plan.logical.promql.selector.LabelMatcher;
 import org.elasticsearch.xpack.esql.plan.logical.promql.selector.LiteralSelector;
 import org.elasticsearch.xpack.esql.plan.logical.promql.selector.RangeSelector;
 import org.elasticsearch.xpack.esql.plan.logical.promql.selector.Selector;
@@ -63,6 +64,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeSet;
 
 import static org.elasticsearch.xpack.esql.common.Failure.fail;
 
@@ -700,6 +702,9 @@ public class PromqlCommand extends UnaryPlan implements TelemetryAware, Timestam
         // Validate entire plan. Each contiguous `or` chain (top-level or nested) flattens to one UnionAll; reject
         // chains that exceed the UnionAll branch limit here rather than during translation.
         Set<VectorBinarySet> topLevelUnions = topLevelUnionChain(p);
+        if (typedMetadata == false && p instanceof VectorBinarySet union && topLevelUnions.contains(union)) {
+            verifyKeywordUnion(failures, union);
+        }
         Set<VectorBinarySet> countedUnionChains = new HashSet<>();
         p.forEachDown(VectorBinarySet.class, setOp -> {
             if (setOp.op() != VectorBinarySet.SetOp.UNION || countedUnionChains.contains(setOp)) {
@@ -1066,6 +1071,52 @@ public class PromqlCommand extends UnaryPlan implements TelemetryAware, Timestam
             failures.add(fail(setOp, "set operator [or] with on/ignoring requires typed time-series metadata [{}]", setOp.sourceText()));
         } else if (topLevelUnion == false) {
             failures.add(fail(setOp, "set operator [or] below the top level requires typed time-series metadata [{}]", setOp.sourceText()));
+        }
+    }
+
+    /**
+     * A top-level {@code or} on keyword metadata deduplicates series on their metadata, which keeps {@code __name__} where the
+     * series store it. That matches Prometheus, which compares label sets without {@code __name__}, only when every branch
+     * reads the same labels and none of them keeps a stored {@code __name__}.
+     */
+    private void verifyKeywordUnion(Failures failures, VectorBinarySet union) {
+        boolean storesName = child().output().stream().anyMatch(field -> LabelMatcher.NAME.equals(PromqlLabels.labelName(field)));
+        List<LogicalPlan> branches = VectorBinarySet.flattenUnion(union);
+        if (branches.stream().anyMatch(PromqlPlan::returnsScalar)) {
+            return; // a scalar operand is illegal whatever the metadata, see verifySetOperator
+        }
+        List<Object> first = null;
+        for (LogicalPlan branch : branches) {
+            UnresolvedPromqlAttribute metadata = PromqlLabels.metadataLabel(branch.output());
+            if (storesName && metadata != null && metadata.unset().contains(LabelMatcher.NAME) == false) {
+                failures.add(
+                    fail(
+                        union,
+                        "set operator [or] over series that keep __name__ requires typed time-series metadata [{}]",
+                        union.sourceText()
+                    )
+                );
+                return;
+            }
+            List<Object> shape = List.of(
+                metadata != null,
+                metadata == null ? Set.of() : new TreeSet<>(metadata.unset()),
+                new TreeSet<>(
+                    PromqlLabels.labelNames(branch.output().stream().filter(a -> PromqlLabels.isMetadataLabel(a) == false).toList())
+                )
+            );
+            if (first == null) {
+                first = shape;
+            } else if (first.equals(shape) == false) {
+                failures.add(
+                    fail(
+                        union,
+                        "set operator [or] between operands with different labels requires typed time-series metadata [{}]",
+                        union.sourceText()
+                    )
+                );
+                return;
+            }
         }
     }
 

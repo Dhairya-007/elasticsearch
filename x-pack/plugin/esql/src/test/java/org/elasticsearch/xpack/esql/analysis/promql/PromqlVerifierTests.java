@@ -292,6 +292,27 @@ public class PromqlVerifierTests extends ESTestCase {
         });
     }
 
+    /**
+     * A top-level or on keyword metadata deduplicates on metadata, so its operands must read the same labels; otherwise
+     * Prometheus' comparison without __name__ needs typed metadata.
+     */
+    public void testKeywordUnionNeedsOperandsWithTheSameLabels() {
+        for (String query : List.of(
+            "rate(network.bytes_in[5m]) or irate(network.bytes_in[5m])",
+            "sum(network.bytes_in) or vector(0)",
+            "sum by (host) (network.bytes_in) or sum by (host) (network.connections)"
+        )) {
+            assertTrue(query, keywordTsdb.query("PROMQL index=test step=5m " + query).resolved());
+        }
+        for (String query : List.of(
+            "sum by (host) (network.bytes_in) or network.connections",
+            "abs(network.bytes_in) or network.connections",
+            "rate(network.bytes_in[5m]) or vector(1)"
+        )) {
+            assertSetOperatorNeedsTypedMetadata(query, "set operator [or] between operands with different labels requires typed");
+        }
+    }
+
     public void testUnionBetweenInstantVectorsIsSupported() {
         // Top-level `or` (UNION) between two instant vectors is supported.
         assertTrue(tsdb.query("PROMQL index=test step=5m network.bytes_in or network.connections").resolved());

@@ -667,6 +667,20 @@ public class PromqlPlanBinaryOperatorTests extends AbstractPromqlPlanOptimizerTe
         assertEquals(Set.of(LabelMatcher.NAME), viewExclusions(plan));
     }
 
+    /**
+     * The outer match key lives in the opaque metadata of the group_left result. Typed metadata reads it out; keyword metadata
+     * cannot, and binding it to null would match the label-less vector(1).
+     */
+    public void testMatchKeyInsideMetadataNeedsTypedMetadata() {
+        String query = "PROMQL index=k8s step=1m result=((network.bytes_in * on(cluster) group_left sum by (cluster) (network.bytes_in)) "
+            + "+ on(cluster) group_left vector(1))";
+        if (typedTimeSeriesMetadata()) {
+            assertTrue(planPromql(query).resolved());
+        } else {
+            assertRequiresTypedMetadata(query);
+        }
+    }
+
     /** Keyword {@code _timeseries} cannot serve a second view of one source, so a shape needing one requires typed metadata. */
     private void assertRequiresTypedMetadata(String query) {
         var e = expectThrows(VerificationException.class, () -> planPromql(query));

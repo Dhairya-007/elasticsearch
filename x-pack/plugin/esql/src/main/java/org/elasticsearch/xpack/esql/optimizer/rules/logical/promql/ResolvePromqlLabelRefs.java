@@ -839,8 +839,12 @@ public final class ResolvePromqlLabelRefs extends ParameterizedRule<LogicalPlan,
                     nulls.add(empty);
                     column = empty.toAttribute();
                 }
-                if (column == null && ref.isMetadata() == false && typed) {
+                if (column == null && ref.isMetadata() == false) {
                     // Opaque metadata holds the label: materialize it with ts_get (label_replace/join, on(...), by(...)).
+                    // Keyword metadata cannot read one label out; binding it to null would match series that have it.
+                    if (typed == false && holdsInMetadata(child.output(), ref.name())) {
+                        throw unsupported(ref);
+                    }
                     Attribute metadata = metadataKeeping(child.output(), ref.name());
                     if (metadata != null) {
                         UnresolvedPromqlLabelRef read = ownByName.get(ref.name());
@@ -935,6 +939,17 @@ public final class ResolvePromqlLabelRefs extends ParameterizedRule<LogicalPlan,
                 }
             }
             return finer;
+        }
+
+        /** Whether a metadata column of {@code output}, typed or keyword, may hold {@code label}. */
+        private boolean holdsInMetadata(List<Attribute> output, String label) {
+            for (Attribute attribute : output) {
+                Set<String> columnUnset = unsetByName.get(attribute.name());
+                if (attribute.resolved() && columnUnset != null && columnUnset.contains(label) == false) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         /** Finest typed metadata column that still holds label. Null if none. */
