@@ -585,13 +585,13 @@ public class PromqlPlanFunctionCallTests extends AbstractPromqlPlanOptimizerTest
         );
         assertTrue("destination promoted: " + plan.output(), plan.output().stream().anyMatch(a -> "dst".equals(a.name())));
         assertTrue("group_left include retained: " + plan.output(), plan.output().stream().anyMatch(a -> "region".equals(a.name())));
-        // Public {_timeseries} (not PathTrace metadataLabelName) so KEEP / Prometheus emit rest labels beside dst/region.
+        // Public {_timeseries} (not the traced metadataLabelName) so KEEP / Prometheus emit rest labels beside dst/region.
         assertTrue(
             "command output must include public _timeseries: " + plan.output(),
             plan.output().stream().anyMatch(a -> "_timeseries".equals(a.name()))
         );
         assertTrue(
-            "command output must not leak PathTrace rest name: " + plan.output(),
+            "command output must not leak the traced rest name: " + plan.output(),
             plan.output().stream().noneMatch(a -> a.name().startsWith("_timeseries$"))
         );
     }

@@ -1336,7 +1336,7 @@ public class PromqlPlanBinaryOperatorTests extends AbstractPromqlPlanOptimizerTe
 
     /**
      * {@code TS_COLLAPSE} must group the command's public {@code _timeseries} column. Using the inner plan's unresolved
-     * rest (refined to drop {@code __name__}) would PathTrace-rename it to {@code _timeseries$__name__} and leave the
+     * rest (refined to drop {@code __name__}) would be traced to {@code _timeseries$__name__} and leave the
      * projected {@code _timeseries} channel uncovered at runtime.
      */
     public void testDifferentMetricsDefaultMatchTsCollapseUsesPublicTimeseries() {

@@ -425,7 +425,7 @@ class PrometheusQueryResponseListener implements ActionListener<EsqlQueryRespons
         return columnName != null && columnName.startsWith("labels.") ? columnName.substring("labels.".length()) : columnName;
     }
 
-    /** _timeseries or a PathTrace-suffixed metadata blob - not a Prometheus label. */
+    /** _timeseries or a traced, suffixed metadata blob - not a Prometheus label. */
     static boolean isTimeseriesColumn(String name) {
         return name != null && (name.equals(MetadataAttribute.TIMESERIES) || name.startsWith(MetadataAttribute.TIMESERIES + "$"));
     }
