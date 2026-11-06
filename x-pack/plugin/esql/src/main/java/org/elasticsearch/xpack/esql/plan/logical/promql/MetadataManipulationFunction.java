@@ -291,24 +291,27 @@ public final class MetadataManipulationFunction extends PromqlFunctionCall {
     }
 
     /**
-     * The value of a source label as a non-null string: {@code COALESCE(label, "")}. The verifier admits string labels only,
-     * and a label the input lacks binds to null.
-     */
-    /**
-     * Whether the destination names a label the input carries as a column, such as one its {@code by(...)} aggregation
-     * groups by. Overwriting it can leave two series with one label set.
+     * Whether the destination may name a label the input series carry, so that overwriting it can leave two series with
+     * one label set. A label column says so by name, such as one a {@code by(...)} aggregation groups by. Opaque metadata
+     * may hold the label when the source maps a field for it; only typed metadata can read the series without it.
      */
     private boolean overwritesLabel(TranslationContext context) {
         if (namesBuiltInColumn(context)) {
             return false;
         }
         String name = PromqlLabels.labelName(destination().name());
+        UnresolvedPromqlAttribute metadata = null;
         for (Attribute attribute : child().output()) {
-            if (PromqlLabels.isMetadataLabel(attribute) == false && PromqlLabels.labelName(attribute).equals(name)) {
+            if (PromqlLabels.isMetadataLabel(attribute) && attribute instanceof UnresolvedPromqlAttribute view) {
+                metadata = view;
+            } else if (PromqlLabels.labelName(attribute).equals(name)) {
                 return true;
             }
         }
-        return false;
+        return metadata != null
+            && metadata.unset().contains(name) == false
+            && PromqlCommand.usesTimeSeriesMetadata(context.analyzer())
+            && context.cmd().child().output().stream().anyMatch(field -> PromqlLabels.labelName(field).equals(name));
     }
 
     /** Whether the destination is named like one of the command's built-in output columns (the step or the value column). */
@@ -317,6 +320,10 @@ public final class MetadataManipulationFunction extends PromqlFunctionCall {
         return name.equals(context.cmd().stepColumnName()) || name.equals(context.cmd().valueColumnName());
     }
 
+    /**
+     * The value of a source label as a non-null string: {@code COALESCE(label, "")}. The verifier admits string labels only,
+     * and a label the input lacks binds to null.
+     */
     private Expression sourceLabelValue(Source source, String labelName) {
         return new Coalesce(source, UnresolvedPromqlLabelRef.label(source(), labelName), List.of(Literal.keyword(source, "")));
     }

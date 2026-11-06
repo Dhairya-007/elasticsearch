@@ -562,6 +562,14 @@ public class FunctionalTimeSeriesIT extends AbstractEsqlIntegTestCase {
             () -> run(query("label_replace(sum by (host) (tx), \"host\", \"x\", \"host\", \".*\")"))
         );
         assertThat(merged.getMessage(), containsString("input must not have duplicates"));
+        // Over raw series too, below an aggregation: Prometheus fails the relabel before the aggregation reads it.
+        var raw = expectThrows(Exception.class, () -> run(query("sum by (region) (label_replace(tx, \"host\", \"x\", \"host\", \".*\"))")));
+        assertThat(raw.getMessage(), containsString("input must not have duplicates"));
+        // A label the source does not map cannot be overwritten.
+        assertRows(
+            query("sum by (tier) (label_replace(tx, \"tier\", \"t-$1\", \"host\", \"(.*)\"))") + " | KEEP result, tier | SORT result",
+            List.of(List.of(1.0, "t-a"), List.of(3.0, "t-b"))
+        );
     }
 
     /** or on(__name__, ...) keeps a right series that differs from a left one only in its name, also inside a default or. */
