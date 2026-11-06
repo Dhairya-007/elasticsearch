@@ -26,16 +26,18 @@ import java.util.Set;
 import static org.elasticsearch.xpack.esql.EsqlTestUtils.as;
 
 /**
- * An Eval stating metadata names the metadata above it after everything it leaves out of the source's series.
+ * Tracing names metadata after what it leaves out of the source's series. Plan-level binding is covered by the PromQL plan
+ * and golden tests.
  */
-public class PathTraceUnresolvedPromqlAttributeRefsTests extends ESTestCase {
+public class BindPromqlAttributeRefsTests extends ESTestCase {
 
+    /** An Eval stating metadata names the metadata above it after everything it leaves out of the source's series. */
     public void testStatementNamesMetadataAbove() {
         EsRelation relation = EsqlTestUtils.relation(IndexMode.TIME_SERIES);
         Alias derived = new Alias(Source.EMPTY, "dst", Literal.keyword(Source.EMPTY, "value"));
         LogicalPlan eval = new Eval(Source.EMPTY, relation, List.of(derived, statement(Set.of("dst"))));
 
-        Project project = as(new PathTraceUnresolvedPromqlAttributeRefs().apply(read(eval)), Project.class);
+        Project project = as(BindPromqlAttributeRefs.trace(read(eval)), Project.class);
         Eval rest = as(project.child(), Eval.class);
         assertEquals(List.of(derived), rest.fields());
         assertSame(relation, rest.child());
@@ -47,7 +49,7 @@ public class PathTraceUnresolvedPromqlAttributeRefsTests extends ESTestCase {
         EsRelation relation = EsqlTestUtils.relation(IndexMode.TIME_SERIES);
         LogicalPlan eval = new Eval(Source.EMPTY, relation, List.of(statement(Set.of("pod")), statement(Set.of("dst"))));
 
-        Project project = as(new PathTraceUnresolvedPromqlAttributeRefs().apply(read(eval)), Project.class);
+        Project project = as(BindPromqlAttributeRefs.trace(read(eval)), Project.class);
         assertSame(relation, project.child());
         assertRead(project, Set.of("pod", "dst"), "_timeseries$dst$pod");
     }

@@ -59,19 +59,31 @@ import java.util.function.Predicate;
 
 /**
  * Binds the label references ({@link UnresolvedPromqlAttribute}) of a translated PromQL plan to columns, right after
- * {@link TranslatePromqlToEsqlPlan} and {@link PathTraceUnresolvedPromqlAttributeRefs}, so translation never depends on which columns a
- * plan carries. A reference binds to the
- * column its input carries, to a key carried up from the source, to metadata computed from a finer one (typed
- * {@link TimeSeriesUnset} only), or to null for a label no series has; anything else is not supported.
+ * {@link TranslatePromqlToEsqlPlan}, so translation never depends on which columns a plan carries.
+ * <p>
+ * Every metadata column is the source's {@code _timeseries} with some labels left out: operators only ever remove labels
+ * from metadata and promote any label they add or rewrite, so the labels left out identify the column. Translation states
+ * each operator's removals relative to its input ({@link UnresolvedPromqlAttribute#unset()}). The rule works in two
+ * directions. Bottom-up, it traces each metadata reference to the removals from the source and names it after them, e.g.
+ * {@code _timeseries$dst$pod}. Top-down, it passes the labels each consumer needs toward its input, and binds every
+ * reference on the way back: to the column its input carries, to a key carried up from the source, to metadata computed
+ * from a finer view (typed {@link TimeSeriesUnset}) or read from it (typed {@link TimeSeriesGet}), or to null for a label
+ * no series has. Anything else, such as leaving labels out of keyword metadata, is not supported.
  */
-public final class PruneUnresolvedPromqlAttributeRefs extends ParameterizedRule<LogicalPlan, LogicalPlan, AnalyzerContext> {
+public final class BindPromqlAttributeRefs extends ParameterizedRule<LogicalPlan, LogicalPlan, AnalyzerContext> {
 
     /** Same wire name emitters use for empty signatures; kept local so this PR does not touch plan operators. */
     private static final String EMPTY_SIGNATURE_KEY = "$empty_prom_sig";
 
     @Override
     public LogicalPlan apply(LogicalPlan plan, AnalyzerContext context) {
-        return new Pass(context, plan).resolveTop(plan);
+        Pass pass = new Pass(context, PromqlCommand.usesTimeSeriesMetadata(context));
+        return pass.resolveTop(pass.follow(plan).plan());
+    }
+
+    /** {@code plan} with every metadata reference named after what it leaves out of the source's series, as binding sees it. */
+    static LogicalPlan trace(LogicalPlan plan) {
+        return new Pass(null, false).follow(plan).plan();
     }
 
     /** Stops at aggregate boundaries: functions inside an over-time aggregate do not survive as second-phase aggregates. */
@@ -79,14 +91,15 @@ public final class PruneUnresolvedPromqlAttributeRefs extends ParameterizedRule<
         if (expression instanceof AggregateFunction) {
             return expression instanceof TimeSeriesAggregateFunction == false;
         }
-        return expression.children().stream().anyMatch(PruneUnresolvedPromqlAttributeRefs::hasAcrossSeriesAggregate);
+        return expression.children().stream().anyMatch(BindPromqlAttributeRefs::hasAcrossSeriesAggregate);
     }
 
     /** One resolution over the plan. {@code typed} when every participating node reads {@code _timeseries} as typed metadata. */
     private static final class Pass {
-        private final AnalyzerContext context;
+        /** Null when the pass only traces metadata. */
+        private final @Nullable AnalyzerContext context;
         private final boolean typed;
-        /** Unset of each PathTrace-named metadata column (against source). */
+        /** Unset of each traced metadata column, against the source. */
         private final Map<String, Set<String>> unsetByName = new HashMap<>(Map.of(PromqlLabels.metadataLabelName(Set.of()), Set.of()));
         /**
          * Ids of the aliases translation puts over references: until a reference binds, its alias's {@link Alias#toAttribute()}
@@ -94,20 +107,199 @@ public final class PruneUnresolvedPromqlAttributeRefs extends ParameterizedRule<
          */
         private final Set<NameId> pinIds = new HashSet<>();
 
-        private Pass(AnalyzerContext context, LogicalPlan plan) {
+        private Pass(@Nullable AnalyzerContext context, boolean typed) {
             this.context = context;
-            this.typed = PromqlCommand.usesTimeSeriesMetadata(context);
-            // PathTraceUnresolvedPromqlAttributeRefs named every metadata reference after what it leaves out
-            plan.forEachExpressionDown(UnresolvedPromqlAttribute.class, ref -> {
-                if (ref.isMetadata()) {
+            this.typed = typed;
+        }
+
+        private final Map<NameId, UnresolvedPromqlAttribute> followed = new HashMap<>();
+
+        /** Followed plan plus the unset of its time-series metadata (composed toward the source). */
+        private record Followed(LogicalPlan plan, @Nullable Set<String> unset) {
+            Followed(LogicalPlan plan, @Nullable UnresolvedPromqlAttribute timeSeriesMetadata) {
+                this(plan, timeSeriesMetadata == null ? null : timeSeriesMetadata.unset());
+            }
+        }
+
+        /**
+         * Traces metadata bottom-up, consuming each metadata statement once, and collects local expressions of the
+         * resulting node during the same traversal.
+         */
+        private Followed follow(LogicalPlan node) {
+            Followed result = followNode(node);
+            result.plan().forEachExpression(expression -> {
+                if (expression instanceof UnresolvedPromqlAttribute ref && ref.isMetadata()) {
                     unsetByName.putIfAbsent(ref.name(), ref.unset());
                 }
-            });
-            plan.forEachExpressionDown(Alias.class, alias -> {
-                if (alias.child() instanceof UnresolvedPromqlAttribute) {
+                if (expression instanceof Alias alias && alias.child() instanceof UnresolvedPromqlAttribute) {
                     pinIds.add(alias.id());
                 }
             });
+            return result;
+        }
+
+        private Followed followNode(LogicalPlan node) {
+            List<Followed> children = node.children().stream().map(this::follow).toList();
+            List<LogicalPlan> plans = children.stream().map(Followed::plan).toList();
+            if (node instanceof UnionAll) {
+                plans = nameBranchMetadata(plans);
+            }
+            LogicalPlan rebuilt = plans.equals(node.children()) ? node : node.replaceChildren(plans);
+            // Union intersects unset so a name-dropping branch cannot strip labels the other still holds.
+            Followed input;
+            if (rebuilt instanceof UnionAll && children.isEmpty() == false) {
+                input = unionMetadata(rebuilt, children);
+            } else {
+                input = children.isEmpty() ? null : children.getFirst();
+            }
+            Set<String> below = input == null || input.unset() == null ? Set.of() : input.unset();
+            if (rebuilt instanceof Eval eval && eval.fields().stream().anyMatch(field -> isMetadata(field.child()))) {
+                return followStatements(eval, below);
+            }
+            LogicalPlan plan = rebuilt.transformExpressionsOnly(
+                UnresolvedPromqlAttribute.class,
+                ref -> ref.isMetadata() ? follow(ref, below) : ref
+            );
+            return metadataOf(plan, input);
+        }
+
+        /**
+         * An Eval stating metadata: each statement leaves its labels out of the metadata before it, as a later field reads
+         * the earlier ones, so the statements compose in field order and the last is the Eval's metadata. They go once
+         * followed.
+         */
+        private Followed followStatements(Eval eval, Set<String> below) {
+            Set<String> current = below;
+            UnresolvedPromqlAttribute stated = null;
+            var fields = new ArrayList<Alias>();
+            for (Alias field : eval.fields()) {
+                if (isMetadata(field.child())) {
+                    stated = follow((UnresolvedPromqlAttribute) field.child(), current);
+                    current = stated.unset();
+                } else {
+                    Set<String> input = current;
+                    fields.add(
+                        (Alias) field.transformDown(UnresolvedPromqlAttribute.class, ref -> ref.isMetadata() ? follow(ref, input) : ref)
+                    );
+                }
+            }
+            LogicalPlan rest = fields.isEmpty() ? eval.child() : new Eval(eval.source(), eval.child(), fields);
+            return new Followed(rest, stated);
+        }
+
+        /**
+         * Union branches project their metadata as {@code _timeseries}, though each holds the view it reads. When every branch
+         * holds the same view, the branch columns take that view's name, so the union's consumer finds the view it reads by
+         * name instead of deriving it again - which keyword metadata cannot. Branches holding different views keep the name:
+         * the union then carries no single view.
+         */
+        private static List<LogicalPlan> nameBranchMetadata(List<LogicalPlan> branches) {
+            String name = null;
+            for (LogicalPlan branch : branches) {
+                String branchName = branch instanceof Project project ? branchMetadataName(project) : null;
+                if (branchName == null || (name != null && name.equals(branchName) == false)) {
+                    return branches;
+                }
+                name = branchName;
+            }
+            if (name.equals(PromqlLabels.metadataLabelName(Set.of()))) {
+                return branches;
+            }
+            String viewName = name;
+            return branches.stream().<LogicalPlan>map(branch -> {
+                Project project = (Project) branch;
+                List<NamedExpression> projections = project.projections()
+                    .stream()
+                    .<NamedExpression>map(projection -> isBranchMetadata(projection) ? renamed((Alias) projection, viewName) : projection)
+                    .toList();
+                return project.withProjections(projections);
+            }).toList();
+        }
+
+        /** {@code alias} under {@code name}, keeping its id so references to the branch column still bind. */
+        private static Alias renamed(Alias alias, String name) {
+            return new Alias(alias.source(), name, alias.child(), alias.id(), alias.synthetic());
+        }
+
+        /** The traced name of the view a branch projects as {@code _timeseries}, or null when it projects none. */
+        private static @Nullable String branchMetadataName(Project branch) {
+            for (NamedExpression projection : branch.projections()) {
+                if (isBranchMetadata(projection)) {
+                    return ((UnresolvedPromqlAttribute) ((Alias) projection).child()).name();
+                }
+            }
+            return null;
+        }
+
+        private static boolean isBranchMetadata(NamedExpression projection) {
+            return projection instanceof Alias alias
+                && alias.name().equals(PromqlLabels.metadataLabelName(Set.of()))
+                && isMetadata(alias.child());
+        }
+
+        /** Intersect unset across branches; a metadata-less branch does not constrain the others. */
+        private static Followed unionMetadata(LogicalPlan union, List<Followed> children) {
+            Set<String> unset = null;
+            for (Followed child : children) {
+                if (child.unset() == null) {
+                    continue;
+                }
+                if (unset == null) {
+                    unset = new LinkedHashSet<>(child.unset());
+                } else {
+                    unset.retainAll(child.unset());
+                }
+            }
+            return new Followed(union, unset);
+        }
+
+        /** Accumulate unset from source through ref. */
+        private UnresolvedPromqlAttribute follow(UnresolvedPromqlAttribute ref, Set<String> below) {
+            return followed.computeIfAbsent(ref.id(), id -> {
+                var unset = new LinkedHashSet<>(below);
+                unset.addAll(ref.unset());
+                return ref.againstSource(unset);
+            });
+        }
+
+        /**
+         * What the metadata of {@code plan} leaves out of the source's series: an aggregate's is its key, or its input's when
+         * it keeps one row per series; a projection's is the one it projects; any other operator passes its input's. Null
+         * when the plan has none, its rows grouped by promoted labels only.
+         */
+        private static Followed metadataOf(LogicalPlan plan, @Nullable Followed input) {
+            Followed passed = input == null ? new Followed(plan, Set.of()) : new Followed(plan, input.unset());
+            if (plan instanceof Aggregate aggregate) {
+                UnresolvedPromqlAttribute key = metadataAmong(aggregate.groupings());
+                if (key == null && aggregate.child() instanceof PackDims pack) {
+                    key = metadataAmong(pack.dims());
+                }
+                if (key != null) {
+                    return new Followed(plan, key);
+                }
+                boolean perSeries = aggregate instanceof TimeSeriesAggregate
+                    && aggregate.aggregates().getFirst() instanceof Alias value
+                    && BindPromqlAttributeRefs.hasAcrossSeriesAggregate(value.child()) == false;
+                return perSeries ? passed : new Followed(plan, (Set<String>) null);
+            }
+            if (plan instanceof Project project) {
+                return new Followed(plan, metadataAmong(project.projections()));
+            }
+            return passed;
+        }
+
+        private static @Nullable UnresolvedPromqlAttribute metadataAmong(List<? extends Expression> expressions) {
+            for (Expression expression : expressions) {
+                Expression read = expression instanceof Alias alias ? alias.child() : expression;
+                if (read instanceof UnresolvedPromqlAttribute ref && ref.isMetadata()) {
+                    return ref;
+                }
+            }
+            return null;
+        }
+
+        private static boolean isMetadata(Expression expression) {
+            return expression instanceof UnresolvedPromqlAttribute ref && ref.isMetadata();
         }
 
         /**
@@ -237,7 +429,7 @@ public final class PruneUnresolvedPromqlAttributeRefs extends ParameterizedRule<
                         aliases.add(alias);
                         column = alias.toAttribute();
                     } else if (column.id().equals(exposed.id()) == false || column.name().equals(exposed.name()) == false) {
-                        // PathTrace may name the column _timeseries$...; rename to the declared public name for KEEP/API.
+                        // Tracing may name the column _timeseries$...; rename to the declared public name for KEEP/API.
                         Alias alias = new Alias(column.source(), exposed.name(), column, exposed.id());
                         aliases.add(alias);
                         column = alias.toAttribute();
