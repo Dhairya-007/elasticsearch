@@ -1170,7 +1170,10 @@ public class PromqlCommand extends UnaryPlan implements TelemetryAware, Timestam
         return metrics;
     }
 
-    /** Whether some series may store the metric name as a {@code __name__} label, as Prometheus remote write does: a queried index maps it. */
+    /**
+     * Whether some series may store the metric name as a {@code __name__} label, as Prometheus remote write does: a queried
+     * index maps it.
+     */
     private boolean storesMetricName() {
         return child().output().stream().anyMatch(field -> LabelMatcher.NAME.equals(PromqlLabels.labelName(field)));
     }
