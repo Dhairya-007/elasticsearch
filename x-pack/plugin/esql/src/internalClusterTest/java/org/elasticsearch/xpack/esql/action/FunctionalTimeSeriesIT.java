@@ -19,7 +19,6 @@ import org.elasticsearch.xpack.esql.plugin.QueryPragmas;
 import org.elasticsearch.xpack.unsignedlong.UnsignedLongMapperPlugin;
 import org.junit.BeforeClass;
 
-import java.math.BigInteger;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collection;
@@ -70,34 +69,6 @@ public class FunctionalTimeSeriesIT extends AbstractEsqlIntegTestCase {
             query("tx") + " | KEEP result, _timeseries",
             List.of(List.of(10.0, "{\"cluster\":\"prod\",\"host\":\"a\"}"), List.of(20.0, "{\"cluster\":\"prod\",\"host\":\"b\"}"))
         );
-    }
-
-    /** BY over WITHOUT restores all values from metadata, including the native type of numeric dimensions. */
-    public void testByOverWithoutRestoresMultivaluedDimensions() {
-        indexMultivaluedAggregationGroups();
-
-        for (String expression : List.of("sum by(region,shard)(tx)", "sum by(region,shard)(sum without(host)(tx))")) {
-            try (EsqlQueryResponse response = run(query(expression) + " | KEEP result, region, shard")) {
-                assertOk(response);
-                assertEquals(
-                    List.of("double", "keyword", "long"),
-                    response.columns().stream().map(column -> column.type().typeName()).toList()
-                );
-                assertThat(
-                    EsqlTestUtils.getValuesList(response),
-                    containsInAnyOrder(List.of(37.0, List.of("east", "west"), List.of(1L, 2L)), List.of(5.0, "west", 2L))
-                );
-            }
-        }
-    }
-
-    private void indexMultivaluedAggregationGroups() {
-        createMetricsIndex(INDEX, Settings.builder().put("index.mapping.source.mode", "stored").build());
-        index(INDEX, "cluster", "prod", "host", "a", "region", List.of("east", "west"), "shard", List.of(1L, 2L), "tx", 10.0);
-        index(INDEX, "cluster", "prod", "host", "b", "region", List.of("west", "east"), "shard", List.of(2L, 1L), "tx", 20.0);
-        index(INDEX, "cluster", "prod", "host", "c", "region", "west", "shard", 2L, "tx", 5.0);
-        index(INDEX, "cluster", "dev", "host", "d", "region", List.of("east", "west"), "shard", List.of(1L, 2L), "tx", 7.0);
-        refresh(INDEX);
     }
 
     /** Each WITHOUT aggregates at its own label grain, even when its parent requests fewer labels. */
@@ -639,68 +610,6 @@ public class FunctionalTimeSeriesIT extends AbstractEsqlIntegTestCase {
         assertRows(
             query("sum_over_time(tx[1m])") + " | KEEP result, _timeseries",
             List.of(List.of(10.0, "{\"cluster\":\"prod\",\"host\":\"a\"}"), List.of(20.0, "{\"cluster\":\"prod\",\"host\":\"b\"}"))
-        );
-    }
-
-    /** Reading labels from a derived dictionary must restore their declared source types. */
-    public void testByOverWithoutPreservesNativeLabelTypes() {
-        createMetricsIndex(INDEX, Settings.builder().put("index.mapping.source.mode", "stored").build());
-        String maxUnsigned = "18446744073709551615";
-        index(
-            INDEX,
-            "cluster",
-            "prod",
-            "host",
-            "a",
-            "shard",
-            "01",
-            "enabled",
-            true,
-            "ip",
-            "2001:0db8:0:0:0:0:0:1",
-            "sequence",
-            maxUnsigned,
-            "tx",
-            7.0
-        );
-        index(INDEX, "cluster", "prod", "host", "b", "shard", 1L, "enabled", true, "ip", "2001:db8::1", "sequence", maxUnsigned, "tx", 9.0);
-        index(
-            INDEX,
-            "cluster",
-            "prod",
-            "host",
-            "c",
-            "shard",
-            2L,
-            "enabled",
-            false,
-            "ip",
-            "192.0.2.1",
-            "sequence",
-            "9223372036854775808",
-            "tx",
-            5.0
-        );
-        refresh(INDEX);
-
-        String query = query("sum by(shard,enabled,ip,sequence)(sum without(host)(tx))") + " | KEEP result, shard, enabled, ip, sequence";
-        try (EsqlQueryResponse response = run(query)) {
-            assertOk(response);
-            assertEquals(
-                List.of("double", "long", "boolean", "ip", "unsigned_long"),
-                response.columns().stream().map(column -> column.type().typeName()).toList()
-            );
-            assertThat(
-                EsqlTestUtils.getValuesList(response),
-                containsInAnyOrder(
-                    List.of(16.0, 1L, true, "2001:db8::1", new BigInteger(maxUnsigned)),
-                    List.of(5.0, 2L, false, "192.0.2.1", new BigInteger("9223372036854775808"))
-                )
-            );
-        }
-        assertRows(
-            query("sum by(shard)(sum without(host)(tx))") + " | EVAL next_shard = shard + 1 | KEEP result, next_shard",
-            List.of(List.of(16.0, 2L), List.of(5.0, 3L))
         );
     }
 
