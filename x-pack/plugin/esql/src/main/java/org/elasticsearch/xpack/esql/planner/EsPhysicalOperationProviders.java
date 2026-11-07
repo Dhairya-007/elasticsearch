@@ -350,8 +350,9 @@ public class EsPhysicalOperationProviders extends AbstractPhysicalOperationProvi
                 plannerSettings.blockLoaderSizeScript()
             );
             if (attr instanceof TimeSeriesMetadataAttribute && attr.dataType() == DataType.TIMESERIES_DATA_TYPE) {
-                // Typed metadata is the keyword source form of the dimensions, converted as it is read
-                return ValuesSourceReaderOperator.loadAndConvert(blockLoader, new TypeConverter(new ToTimeSeries(attr.source(), attr)));
+                // Typed metadata is the keyword source form of the dimensions, converted as it is read: the loader yields keyword
+                var cast = new ToTimeSeries(attr.source(), attr.withDataType(DataType.KEYWORD));
+                return ValuesSourceReaderOperator.loadAndConvert(blockLoader, new TypeConverter(cast));
             }
             return ValuesSourceReaderOperator.load(blockLoader);
         }
