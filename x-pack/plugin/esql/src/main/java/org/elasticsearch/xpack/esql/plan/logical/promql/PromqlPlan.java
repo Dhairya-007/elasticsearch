@@ -21,7 +21,7 @@ import java.util.List;
 public interface PromqlPlan {
     /**
      * Returns the result's labels: the ones it promotes, for example those added via {@code by(...)}, and its
-     * {@code _timeseries} metadata ({@link UnresolvedPromqlAttribute#metadata}) when it keeps labels it does not promote.
+     * {@code _timeseries} metadata ({@link UnresolvedPromqlLabelRef#metadata}) when it keeps labels it does not promote.
      * <p>
      * Note: The value and step column are added by {@link PromqlCommand#output()}
      * and should not be added by implementations of this interface.
@@ -35,8 +35,8 @@ public interface PromqlPlan {
 
     /**
      * This node's ES|QL plan, built bottom-up from its children's results. A node reads the labels of its input through
-     * references ({@link UnresolvedPromqlAttribute}) and never looks at which columns its input carries:
-     * {@code BindPromqlAttributeRefs} binds them right after translation. {@code translation} carries the shared services:
+     * references ({@link UnresolvedPromqlLabelRef}) and never looks at which columns its input carries:
+     * {@code ResolvePromqlLabelRefs} binds them right after translation. {@code translation} carries the shared services:
      * recursion into the child, and the aggregation and {@link TranslationContext#eval eval} helpers every node composes
      * its result from.
      */

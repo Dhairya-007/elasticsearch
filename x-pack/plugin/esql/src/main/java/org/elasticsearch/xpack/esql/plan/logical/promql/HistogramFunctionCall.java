@@ -51,10 +51,10 @@ public abstract sealed class HistogramFunctionCall extends PromqlFunctionCall pe
         if (output == null) {
             var keys = new ArrayList<Attribute>();
             for (Attribute attr : child().output()) {
-                if (attr instanceof UnresolvedPromqlAttribute metadata && metadata.isMetadata()) {
+                if (attr instanceof UnresolvedPromqlLabelRef metadata && metadata.isMetadata()) {
                     var excluded = new LinkedHashSet<>(metadata.unset());
                     excluded.addAll(COLLAPSED_LABELS);
-                    keys.add(UnresolvedPromqlAttribute.metadata(source(), excluded));
+                    keys.add(UnresolvedPromqlLabelRef.metadata(source(), excluded));
                 } else if (MetadataAttribute.isTimeSeriesAttributeName(attr.name())
                     || LE_LABEL.equals(PromqlLabels.labelName(attr)) == false) {
                         keys.add(attr);
@@ -72,9 +72,9 @@ public abstract sealed class HistogramFunctionCall extends PromqlFunctionCall pe
     private List<Attribute> bucketKeys(TranslationContext context) {
         var keys = new ArrayList<Attribute>();
         if (PromqlLabels.metadataLabel(child().output()) != null) {
-            keys.add(UnresolvedPromqlAttribute.metadata(source(), COLLAPSED_LABELS));
+            keys.add(UnresolvedPromqlLabelRef.metadata(source(), COLLAPSED_LABELS));
         }
-        keys.add(UnresolvedPromqlAttribute.label(source(), LE_LABEL));
+        keys.add(UnresolvedPromqlLabelRef.label(source(), LE_LABEL));
         return keys;
     }
 
@@ -113,10 +113,10 @@ public abstract sealed class HistogramFunctionCall extends PromqlFunctionCall pe
 
         // Bucket counts are consumed as doubles; counter buckets are frequently integer/long typed, so cast explicitly.
         Expression count = new ToDouble(source(), result.value());
-        Attribute le = UnresolvedPromqlAttribute.label(source(), LE_LABEL);
+        Attribute le = UnresolvedPromqlLabelRef.label(source(), LE_LABEL);
         return context.emitAggregate(
             result,
-            UnresolvedPromqlAttribute.tsIdentity(source(), output()),
+            UnresolvedPromqlLabelRef.tsIdentity(source(), output()),
             true,
             buildAggregateFunction(count, le)
         );

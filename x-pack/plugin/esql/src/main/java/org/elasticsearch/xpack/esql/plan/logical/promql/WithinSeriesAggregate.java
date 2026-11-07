@@ -63,7 +63,7 @@ public final class WithinSeriesAggregate extends PromqlFunctionCall {
     @Override
     public List<Attribute> output() {
         if (output == null) {
-            List<Attribute> full = List.of(UnresolvedPromqlAttribute.metadata(source(), Set.of()));
+            List<Attribute> full = List.of(UnresolvedPromqlLabelRef.metadata(source(), Set.of()));
             output = keepsMetricName(definition()) ? full : ValueTransformationFunction.withoutMetricName(source(), full);
         }
         return output;

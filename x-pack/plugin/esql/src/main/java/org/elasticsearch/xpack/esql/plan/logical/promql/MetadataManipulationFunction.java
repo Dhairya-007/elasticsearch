@@ -143,10 +143,10 @@ public final class MetadataManipulationFunction extends PromqlFunctionCall {
         String name = PromqlLabels.labelName(destination);
         var keys = new ArrayList<Attribute>();
         for (Attribute attribute : child().output()) {
-            if (PromqlLabels.isMetadataLabel(attribute) && attribute instanceof UnresolvedPromqlAttribute ml) {
+            if (PromqlLabels.isMetadataLabel(attribute) && attribute instanceof UnresolvedPromqlLabelRef ml) {
                 var unset = new LinkedHashSet<>(ml.unset());
                 unset.add(name);
-                keys.add(UnresolvedPromqlAttribute.metadata(source(), unset));
+                keys.add(UnresolvedPromqlLabelRef.metadata(source(), unset));
             } else if (PromqlLabels.labelName(attribute).equals(name) == false) {
                 keys.add(attribute);
             }
@@ -158,8 +158,8 @@ public final class MetadataManipulationFunction extends PromqlFunctionCall {
     /** The derivation reads the destination's stored value first, for its no-match fallback, then its source labels. */
     private List<Attribute> readLabels() {
         var labels = new ArrayList<Attribute>();
-        labels.add(UnresolvedPromqlAttribute.label(source(), PromqlLabels.labelName(destination)));
-        sourceLabels().forEach(label -> labels.add(UnresolvedPromqlAttribute.label(source(), label)));
+        labels.add(UnresolvedPromqlLabelRef.label(source(), PromqlLabels.labelName(destination)));
+        sourceLabels().forEach(label -> labels.add(UnresolvedPromqlLabelRef.label(source(), label)));
         return labels;
     }
 
@@ -216,9 +216,9 @@ public final class MetadataManipulationFunction extends PromqlFunctionCall {
         Alias derived = namesBuiltInColumn(context)
             ? new Alias(source, TemporaryNameGenerator.locallyUniqueTemporaryName(destination.name()), destinationValue)
             : new Alias(source, destination.name(), destinationValue, destination.id());
-        // The derived label shadows a stored one of the same name; BindPromqlAttributeRefs drops the stored column.
+        // The derived label shadows a stored one of the same name; ResolvePromqlLabelRefs drops the stored column.
         var fields = new ArrayList<Alias>(List.of(derived));
-        UnresolvedPromqlAttribute metadata = PromqlLabels.metadataLabel(output());
+        UnresolvedPromqlLabelRef metadata = PromqlLabels.metadataLabel(output());
         if (metadata != null) {
             // The result's metadata leaves the promoted destination out of the input's. Nothing else in the plan says so.
             fields.add(new Alias(source, metadata.name(), metadata));
@@ -293,7 +293,7 @@ public final class MetadataManipulationFunction extends PromqlFunctionCall {
     }
 
     private Expression sourceLabelValue(Source source, String labelName) {
-        return new Coalesce(source, UnresolvedPromqlAttribute.label(source(), labelName), List.of(Literal.keyword(source, "")));
+        return new Coalesce(source, UnresolvedPromqlLabelRef.label(source(), labelName), List.of(Literal.keyword(source, "")));
     }
 
 }

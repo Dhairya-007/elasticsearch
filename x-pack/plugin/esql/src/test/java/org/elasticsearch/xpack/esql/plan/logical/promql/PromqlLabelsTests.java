@@ -120,7 +120,7 @@ public class PromqlLabelsTests extends ESTestCase {
 
     private static LogicalPlan input(Set<String> exclusions) {
         var labels = new ArrayList<Attribute>();
-        labels.add(UnresolvedPromqlAttribute.metadata(Source.EMPTY, exclusions));
+        labels.add(UnresolvedPromqlLabelRef.metadata(Source.EMPTY, exclusions));
         return new Project(Source.EMPTY, EsqlTestUtils.relation(IndexMode.TIME_SERIES), labels);
     }
 

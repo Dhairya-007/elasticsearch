@@ -70,10 +70,10 @@ public final class ValueTransformationFunction extends PromqlFunctionCall {
         var result = new ArrayList<Attribute>(tsIdentity.size());
         for (Attribute attr : tsIdentity) {
             if (PromqlLabels.isMetadataLabel(attr)) {
-                UnresolvedPromqlAttribute timeSeriesMetadata = (UnresolvedPromqlAttribute) attr;
+                UnresolvedPromqlLabelRef timeSeriesMetadata = (UnresolvedPromqlLabelRef) attr;
                 var unset = new LinkedHashSet<>(timeSeriesMetadata.unset());
                 unset.add(LabelMatcher.NAME);
-                result.add(UnresolvedPromqlAttribute.metadata(source, unset));
+                result.add(UnresolvedPromqlLabelRef.metadata(source, unset));
             } else if (LabelMatcher.NAME.equals(PromqlLabels.labelName(attr)) == false) {
                 result.add(attr);
             }

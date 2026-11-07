@@ -28,9 +28,9 @@ import org.elasticsearch.xpack.esql.expression.function.aggregate.AggregateFunct
 import org.elasticsearch.xpack.esql.expression.function.aggregate.TimeSeriesAggregateFunction;
 import org.elasticsearch.xpack.esql.expression.function.aggregate.Values;
 import org.elasticsearch.xpack.esql.expression.function.grouping.TimeSeriesWithout;
-import org.elasticsearch.xpack.esql.expression.function.scalar.timeseries.ToTimeSeries;
 import org.elasticsearch.xpack.esql.expression.function.scalar.timeseries.TimeSeriesGet;
 import org.elasticsearch.xpack.esql.expression.function.scalar.timeseries.TimeSeriesUnset;
+import org.elasticsearch.xpack.esql.expression.function.scalar.timeseries.ToTimeSeries;
 import org.elasticsearch.xpack.esql.plan.logical.Aggregate;
 import org.elasticsearch.xpack.esql.plan.logical.EsRelation;
 import org.elasticsearch.xpack.esql.plan.logical.Eval;
@@ -418,12 +418,7 @@ public final class ResolvePromqlLabelRefs extends ParameterizedRule<LogicalPlan,
                     Attribute column = binding.column(ref);
                     if (ref.isMetadata() && column.dataType() == DataType.KEYWORD && PromqlCommand.timeseriesType() != DataType.KEYWORD) {
                         // a keyword read where the command exposes typed metadata
-                        Alias alias = new Alias(
-                            ref.source(),
-                            exposed.name(),
-                            new ToTimeSeries(ref.source(), column),
-                            exposed.id()
-                        );
+                        Alias alias = new Alias(ref.source(), exposed.name(), new ToTimeSeries(ref.source(), column), exposed.id());
                         aliases.add(alias);
                         column = alias.toAttribute();
                     } else if (column.id().equals(exposed.id()) == false || column.name().equals(exposed.name()) == false) {
@@ -727,12 +722,7 @@ public final class ResolvePromqlLabelRefs extends ParameterizedRule<LogicalPlan,
          * Binds the references of {@code node} and the {@code keys} it groups by to columns of {@code child}. What the child
          * lacks is a null column defined right above it, under the reference's id where the node has one.
          */
-        private Binding bind(
-            LogicalPlan node,
-            LogicalPlan child,
-            List<UnresolvedPromqlLabelRef> own,
-            List<UnresolvedPromqlLabelRef> keys
-        ) {
+        private Binding bind(LogicalPlan node, LogicalPlan child, List<UnresolvedPromqlLabelRef> own, List<UnresolvedPromqlLabelRef> keys) {
             return bind(node, child, own, keys, Map.of());
         }
 
@@ -930,10 +920,7 @@ public final class ResolvePromqlLabelRefs extends ParameterizedRule<LogicalPlan,
             }
         }
 
-        private static List<UnresolvedPromqlLabelRef> concat(
-            List<UnresolvedPromqlLabelRef> first,
-            List<UnresolvedPromqlLabelRef> second
-        ) {
+        private static List<UnresolvedPromqlLabelRef> concat(List<UnresolvedPromqlLabelRef> first, List<UnresolvedPromqlLabelRef> second) {
             var result = new ArrayList<UnresolvedPromqlLabelRef>(first);
             second.forEach(ref -> addIfAbsent(result, ref));
             return result;

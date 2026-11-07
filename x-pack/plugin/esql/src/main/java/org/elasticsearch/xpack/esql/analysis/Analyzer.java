@@ -162,7 +162,7 @@ import org.elasticsearch.xpack.esql.optimizer.rules.logical.SubstituteSurrogateE
 import org.elasticsearch.xpack.esql.optimizer.rules.logical.TranslateTimeSeriesAggregate;
 import org.elasticsearch.xpack.esql.optimizer.rules.logical.TranslateTimeSeriesWithout;
 import org.elasticsearch.xpack.esql.optimizer.rules.logical.promql.AddPromqlResultOrder;
-import org.elasticsearch.xpack.esql.optimizer.rules.logical.promql.BindPromqlAttributeRefs;
+import org.elasticsearch.xpack.esql.optimizer.rules.logical.promql.ResolvePromqlLabelRefs;
 import org.elasticsearch.xpack.esql.optimizer.rules.logical.promql.TranslatePromqlToEsqlPlan;
 import org.elasticsearch.xpack.esql.optimizer.rules.logical.promql.TranslateTimeSeriesCollapse;
 import org.elasticsearch.xpack.esql.optimizer.rules.physical.local.LucenePushdownPredicates;
@@ -339,7 +339,7 @@ public class Analyzer extends ParameterizedRuleExecutor<LogicalPlan, AnalyzerCon
                 new TranslatePromqlToEsqlPlan(),
                 // Binds the labels the translated plan reads to the columns producing them. ResolveAndVerifyPromqlRefs
                 // resolves the references of the PromQL command itself, before translation.
-                new BindPromqlAttributeRefs()
+                new ResolvePromqlLabelRefs()
             ),
             new Batch<>(
                 "Resolution",

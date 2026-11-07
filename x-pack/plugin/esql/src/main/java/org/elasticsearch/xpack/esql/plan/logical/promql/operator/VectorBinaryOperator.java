@@ -50,7 +50,7 @@ import org.elasticsearch.xpack.esql.plan.logical.promql.ScalarConversionFunction
 import org.elasticsearch.xpack.esql.plan.logical.promql.TranslationContext;
 import org.elasticsearch.xpack.esql.plan.logical.promql.TranslationContext.IntermediateResult;
 import org.elasticsearch.xpack.esql.plan.logical.promql.TranslationContext.IntermediateResult.Kind;
-import org.elasticsearch.xpack.esql.plan.logical.promql.UnresolvedPromqlAttribute;
+import org.elasticsearch.xpack.esql.plan.logical.promql.UnresolvedPromqlLabelRef;
 import org.elasticsearch.xpack.esql.plan.logical.promql.selector.LabelMatcher;
 import org.elasticsearch.xpack.esql.plan.logical.promql.selector.LiteralSelector;
 import org.elasticsearch.xpack.esql.plan.logical.promql.selector.Selector;
@@ -159,7 +159,7 @@ public abstract sealed class VectorBinaryOperator extends BinaryPlan implements 
 
         if (match.grouping() != Joining.NONE) {
             boolean manyLeft = match.grouping() == Joining.LEFT;
-            UnresolvedPromqlAttribute timeSeriesMetadata = PromqlLabels.metadataLabel(manyLeft ? leftAttrs : rightAttrs);
+            UnresolvedPromqlLabelRef timeSeriesMetadata = PromqlLabels.metadataLabel(manyLeft ? leftAttrs : rightAttrs);
             if (timeSeriesMetadata != null) {
                 return groupedOverOpaqueMany(manyLeft ? leftAttrs : rightAttrs, timeSeriesMetadata, manyLeft ? rightAttrs : leftAttrs);
             }
@@ -225,11 +225,11 @@ public abstract sealed class VectorBinaryOperator extends BinaryPlan implements 
             ignored.add(LabelMatcher.NAME);
         }
         var result = new ArrayList<Attribute>();
-        UnresolvedPromqlAttribute timeSeriesMetadata = PromqlLabels.metadataLabel(leftAttrs);
+        UnresolvedPromqlLabelRef timeSeriesMetadata = PromqlLabels.metadataLabel(leftAttrs);
         if (timeSeriesMetadata != null) {
             var unset = new LinkedHashSet<>(timeSeriesMetadata.unset());
             unset.addAll(ignored);
-            result.add(UnresolvedPromqlAttribute.metadata(source(), unset));
+            result.add(UnresolvedPromqlLabelRef.metadata(source(), unset));
         }
         for (Attribute attr : leftAttrs) {
             if (PromqlLabels.isMetadataLabel(attr) == false && ignored.contains(PromqlLabels.labelName(attr)) == false) {
@@ -243,14 +243,14 @@ public abstract sealed class VectorBinaryOperator extends BinaryPlan implements 
      * Opaque many-side under group_left/right: includes come from the one side (null if absent); prior promoted
      * labels on many stay - already promoted beside metadata and must not be dropped.
      */
-    private List<Attribute> groupedOverOpaqueMany(List<Attribute> many, UnresolvedPromqlAttribute timeSeriesMetadata, List<Attribute> one) {
+    private List<Attribute> groupedOverOpaqueMany(List<Attribute> many, UnresolvedPromqlLabelRef timeSeriesMetadata, List<Attribute> one) {
         var unset = new LinkedHashSet<>(timeSeriesMetadata.unset());
         unset.addAll(match.groupingLabels());
         if (dropMetricName) {
             unset.add(LabelMatcher.NAME);
         }
         var result = new ArrayList<Attribute>();
-        result.add(UnresolvedPromqlAttribute.metadata(source(), unset));
+        result.add(UnresolvedPromqlLabelRef.metadata(source(), unset));
         for (Attribute attr : many) {
             if (PromqlLabels.isMetadataLabel(attr)) {
                 continue;
@@ -890,14 +890,14 @@ public abstract sealed class VectorBinaryOperator extends BinaryPlan implements 
         List<Attribute> fields = new ArrayList<>();
         fields.add(buildValue);
         for (String name : match.groupingLabels()) {
-            fields.add(UnresolvedPromqlAttribute.label(source(), name));
+            fields.add(UnresolvedPromqlLabelRef.label(source(), name));
         }
         return fields;
     }
 
     /**
      * One side's plan with its match key packed next to step (step alone when the key is empty), then layout-pinned
-     * when needed. PackDims runs before pin so join-key {@link UnresolvedPromqlAttribute}s resolve into the collapse;
+     * when needed. PackDims runs before pin so join-key {@link UnresolvedPromqlLabelRef}s resolve into the collapse;
      * a pin Project between Aggregate and PackDims would drop those needs ({@code resolveProject} does not forward
      * them) and HashJoin would see duplicate null keys.
      */
@@ -1000,7 +1000,7 @@ public abstract sealed class VectorBinaryOperator extends BinaryPlan implements 
                 // Start from the operand's tsIdentity (e.g. without(...) already left labels out). Packing only
                 // match-ignored labels would re-expand dropped dimensions and falsely match a labelless aggregate to
                 // a still-labeled sibling (promfuzz-vm 820: max without (job) * sum without (job, instance)).
-                UnresolvedPromqlAttribute timeSeriesMetadata = PromqlLabels.metadataLabel(operand.output());
+                UnresolvedPromqlLabelRef timeSeriesMetadata = PromqlLabels.metadataLabel(operand.output());
                 var ignored = new LinkedHashSet<>(timeSeriesMetadata.unset());
                 ignored.addAll(match.filterLabels());
                 // A Prometheus signature never includes the metric name unless on(...) lists it.
@@ -1008,13 +1008,13 @@ public abstract sealed class VectorBinaryOperator extends BinaryPlan implements 
                 if (PromqlCommand.usesTimeSeriesMetadata(context.analyzer())) {
                     ignored.addAll(keyLabels);
                 }
-                key.add(UnresolvedPromqlAttribute.metadata(source(), ignored));
+                key.add(UnresolvedPromqlLabelRef.metadata(source(), ignored));
             } else {
-                key.add(UnresolvedPromqlAttribute.label(source(), EMPTY_SIGNATURE_KEY));
+                key.add(UnresolvedPromqlLabelRef.label(source(), EMPTY_SIGNATURE_KEY));
             }
         }
         for (String name : keyLabels) {
-            key.add(UnresolvedPromqlAttribute.label(source(), name));
+            key.add(UnresolvedPromqlLabelRef.label(source(), name));
         }
         return key;
     }
@@ -1029,7 +1029,7 @@ public abstract sealed class VectorBinaryOperator extends BinaryPlan implements 
         if (dropMetricName == false) {
             return declared;
         }
-        UnresolvedPromqlAttribute timeSeriesMetadata = PromqlLabels.metadataLabel(declared);
+        UnresolvedPromqlLabelRef timeSeriesMetadata = PromqlLabels.metadataLabel(declared);
         boolean metadataHoldsName = timeSeriesMetadata != null && timeSeriesMetadata.unset().contains(LabelMatcher.NAME) == false;
         if (metadataHoldsName == false && PromqlLabels.getLabel(declared, LabelMatcher.NAME) == null) {
             return declared;
@@ -1038,7 +1038,7 @@ public abstract sealed class VectorBinaryOperator extends BinaryPlan implements 
         if (timeSeriesMetadata != null) {
             var unset = new LinkedHashSet<>(timeSeriesMetadata.unset());
             unset.add(LabelMatcher.NAME);
-            result.add(metadataHoldsName ? UnresolvedPromqlAttribute.metadata(source(), unset) : timeSeriesMetadata);
+            result.add(metadataHoldsName ? UnresolvedPromqlLabelRef.metadata(source(), unset) : timeSeriesMetadata);
         }
         for (Attribute attr : declared) {
             if (PromqlLabels.isMetadataLabel(attr) == false && LabelMatcher.NAME.equals(PromqlLabels.labelName(attr)) == false) {
@@ -1055,7 +1055,7 @@ public abstract sealed class VectorBinaryOperator extends BinaryPlan implements 
     private List<Attribute> bindOutput(TranslationContext context, List<Attribute> declared) {
         var output = new ArrayList<Attribute>();
         for (Attribute attribute : declared) {
-            output.add(UnresolvedPromqlAttribute.of(source(), attribute));
+            output.add(UnresolvedPromqlLabelRef.of(source(), attribute));
         }
         return output;
     }
@@ -1096,7 +1096,7 @@ public abstract sealed class VectorBinaryOperator extends BinaryPlan implements 
         Set<String> names = new HashSet<>();
         for (Expression grouping : aggregate.groupings()) {
             Expression key = grouping instanceof Alias alias ? alias.child() : grouping;
-            if (key instanceof UnresolvedPromqlAttribute ref && ref.isMetadata()) {
+            if (key instanceof UnresolvedPromqlLabelRef ref && ref.isMetadata()) {
                 names.add(PromqlLabels.metadataLabelName(ref.unset()));
             } else if (grouping instanceof NamedExpression ne) {
                 names.add(ne.name());

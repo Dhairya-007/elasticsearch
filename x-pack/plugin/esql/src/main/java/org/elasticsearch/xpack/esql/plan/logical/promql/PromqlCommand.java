@@ -507,8 +507,8 @@ public class PromqlCommand extends UnaryPlan implements TelemetryAware, Timestam
 
     /**
      * Translates this command into its ES|QL plan: every top-level branch translated, combined, and projected to the
-     * declared {@link #output()}. The plan reads its labels through references ({@link UnresolvedPromqlAttribute}) that
-     * {@code BindPromqlAttributeRefs} binds right after.
+     * declared {@link #output()}. The plan reads its labels through references ({@link UnresolvedPromqlLabelRef}) that
+     * {@code ResolvePromqlLabelRefs} binds right after.
      */
     public LogicalPlan translate(AnalyzerContext analyzer) {
         var context = new TranslationContext(this, analyzer);
@@ -588,7 +588,7 @@ public class PromqlCommand extends UnaryPlan implements TelemetryAware, Timestam
             var attr = projected.get(i).toAttribute();
             // the value and step lead the declared output, then the result's tsIdentity
             if (i >= 2 && constant == false) {
-                var label = UnresolvedPromqlAttribute.of(promqlPlan().source(), tsIdentity.get(i - 2));
+                var label = UnresolvedPromqlLabelRef.of(promqlPlan().source(), tsIdentity.get(i - 2));
                 projected.set(i, new Alias(promqlPlan().source(), attr.name(), label, attr.id()));
                 continue;
             }

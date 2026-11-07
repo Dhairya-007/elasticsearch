@@ -125,7 +125,7 @@ public final class AcrossSeriesAggregate extends PromqlFunctionCall {
                 var unset = new LinkedHashSet<>(ml.unset());
                 unset.addAll(dropping);
                 var result = new ArrayList<Attribute>();
-                result.add(UnresolvedPromqlAttribute.metadata(source(), unset));
+                result.add(UnresolvedPromqlLabelRef.metadata(source(), unset));
                 for (var attr : output) {
                     if (PromqlLabels.isMetadataLabel(attr) == false && dropping.contains(labelName(attr)) == false) {
                         result.add(attr);
@@ -184,7 +184,7 @@ public final class AcrossSeriesAggregate extends PromqlFunctionCall {
         Expression function = buildEsqlFunction(ir.value(), promqlCtx);
 
         // A raw operand collapses once, with the operator's function fused into the per-series aggregate; a table regroups.
-        List<Attribute> keys = UnresolvedPromqlAttribute.tsIdentity(source(), output());
+        List<Attribute> keys = UnresolvedPromqlLabelRef.tsIdentity(source(), output());
         IntermediateResult result = ir.kind().afterInitialAggregation
             ? ctx.emitAggregate(ir, keys, grouping == WITHOUT, function)
             : ctx.emitInitialAggregate(ir, keys, function);

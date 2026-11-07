@@ -146,7 +146,7 @@ public final class AcrossSeriesReduction extends PromqlFunctionCall {
 
         var promqlCtx = new PromqlContext(context.time(), AggregateFunction.NO_WINDOW, childResult.step(), context.configuration());
         // Ranking reads every series of the child: the aggregate keeps the child's labels.
-        List<Attribute> keys = UnresolvedPromqlAttribute.tsIdentity(source(), output());
+        List<Attribute> keys = UnresolvedPromqlLabelRef.tsIdentity(source(), output());
         IntermediateResult aggregated = childResult.kind().afterInitialAggregation
             ? context.emitAggregate(childResult, keys, false, childResult.value())
             : context.emitInitialAggregate(childResult, keys, childResult.value());
@@ -213,13 +213,13 @@ public final class AcrossSeriesReduction extends PromqlFunctionCall {
         var keys = new ArrayList<Expression>();
         var ml = PromqlLabels.metadataLabel(output());
         if (ml != null) {
-            keys.add(UnresolvedPromqlAttribute.metadata(source(), ml.unset()));
+            keys.add(UnresolvedPromqlLabelRef.metadata(source(), ml.unset()));
         }
         output().stream()
             .filter(attribute -> PromqlLabels.isMetadataLabel(attribute) == false)
             .map(PromqlLabels::labelName)
             .sorted()
-            .forEach(label -> keys.add(UnresolvedPromqlAttribute.label(source(), label)));
+            .forEach(label -> keys.add(UnresolvedPromqlLabelRef.label(source(), label)));
         return keys;
     }
 
@@ -231,7 +231,7 @@ public final class AcrossSeriesReduction extends PromqlFunctionCall {
         var groupings = new ArrayList<Expression>();
         groupings.add(table.step());
         if (grouping() == AcrossSeriesAggregate.Grouping.BY) {
-            partitions.forEach(partition -> groupings.add(UnresolvedPromqlAttribute.label(source(), partition)));
+            partitions.forEach(partition -> groupings.add(UnresolvedPromqlLabelRef.label(source(), partition)));
         }
         return groupings;
     }

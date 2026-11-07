@@ -32,7 +32,7 @@ import org.elasticsearch.xpack.esql.plan.logical.promql.PromqlLabels;
 import org.elasticsearch.xpack.esql.plan.logical.promql.TranslationContext;
 import org.elasticsearch.xpack.esql.plan.logical.promql.TranslationContext.IntermediateResult;
 import org.elasticsearch.xpack.esql.plan.logical.promql.TranslationContext.IntermediateResult.Kind;
-import org.elasticsearch.xpack.esql.plan.logical.promql.UnresolvedPromqlAttribute;
+import org.elasticsearch.xpack.esql.plan.logical.promql.UnresolvedPromqlLabelRef;
 import org.elasticsearch.xpack.esql.plan.logical.promql.selector.LabelMatcher;
 
 import java.util.ArrayList;
@@ -118,12 +118,12 @@ public final class VectorBinarySet extends VectorBinaryOperator {
     public static List<Attribute> unionOutputByName(List<? extends LogicalPlan> plans) {
         List<Attribute> result = new ArrayList<>();
         Set<String> names = new HashSet<>();
-        List<UnresolvedPromqlAttribute> metadatas = new ArrayList<>();
+        List<UnresolvedPromqlLabelRef> metadatas = new ArrayList<>();
         Source metadataSource = null;
         for (LogicalPlan plan : plans) {
             for (Attribute attr : plan.output()) {
                 if (PromqlLabels.isMetadataLabel(attr)) {
-                    metadatas.add((UnresolvedPromqlAttribute) attr);
+                    metadatas.add((UnresolvedPromqlLabelRef) attr);
                     if (metadataSource == null) {
                         metadataSource = attr.source();
                     }
@@ -134,14 +134,14 @@ public final class VectorBinarySet extends VectorBinaryOperator {
         }
         if (metadatas.isEmpty() == false) {
             Set<String> unset = null;
-            for (UnresolvedPromqlAttribute timeSeriesMetadata : metadatas) {
+            for (UnresolvedPromqlLabelRef timeSeriesMetadata : metadatas) {
                 if (unset == null) {
                     unset = new LinkedHashSet<>(timeSeriesMetadata.unset());
                 } else {
                     unset.retainAll(timeSeriesMetadata.unset());
                 }
             }
-            result.add(UnresolvedPromqlAttribute.metadata(metadataSource, unset));
+            result.add(UnresolvedPromqlLabelRef.metadata(metadataSource, unset));
         }
         return result;
     }
@@ -248,13 +248,13 @@ public final class VectorBinarySet extends VectorBinaryOperator {
             if (ir.kind().constant == false) {
                 // Typed: separate match key unsets __name__ (Prometheus set-op identity). Keyword cannot unset
                 // __name__ after collapse, so it dedups on metadata instead.
-                UnresolvedPromqlAttribute branchTimeSeriesMetadata = PromqlLabels.metadataLabel(branches.get(i).output());
+                UnresolvedPromqlLabelRef branchTimeSeriesMetadata = PromqlLabels.metadataLabel(branches.get(i).output());
                 boolean typedMetadata = PromqlCommand.usesTimeSeriesMetadata(context.analyzer());
                 for (Attribute label : tsIdentity) {
                     if (PromqlLabels.isMetadataLabel(label)) {
-                        UnresolvedPromqlAttribute pack = branchTimeSeriesMetadata != null
-                            ? UnresolvedPromqlAttribute.metadata(source, branchTimeSeriesMetadata.unset())
-                            : UnresolvedPromqlAttribute.of(source, label);
+                        UnresolvedPromqlLabelRef pack = branchTimeSeriesMetadata != null
+                            ? UnresolvedPromqlLabelRef.metadata(source, branchTimeSeriesMetadata.unset())
+                            : UnresolvedPromqlLabelRef.of(source, label);
                         projections.add(new Alias(source, MetadataAttribute.TIMESERIES, pack, label.id()));
                         if (typedMetadata) {
                             Set<String> matchUnset = new LinkedHashSet<>();
@@ -262,7 +262,7 @@ public final class VectorBinarySet extends VectorBinaryOperator {
                                 matchUnset.addAll(branchTimeSeriesMetadata.unset());
                             }
                             matchUnset.add(LabelMatcher.NAME);
-                            projections.add(new Alias(source, OR_MATCH_KEY, UnresolvedPromqlAttribute.metadata(source, matchUnset)));
+                            projections.add(new Alias(source, OR_MATCH_KEY, UnresolvedPromqlLabelRef.metadata(source, matchUnset)));
                         }
                     } else {
                         // Null-fill undeclared labels: resolving them would invent by-keys (empty max by (cluster) or vector(0)).
@@ -272,7 +272,7 @@ public final class VectorBinarySet extends VectorBinaryOperator {
                             labelName
                         ) != null;
                         if (declared) {
-                            projections.add(UnresolvedPromqlAttribute.of(source, label));
+                            projections.add(UnresolvedPromqlLabelRef.of(source, label));
                         } else {
                             Alias nullLabel = new Alias(source, label.name(), new Literal(source, null, label.dataType()), new NameId());
                             nullLabelEvals.add(nullLabel);
@@ -319,7 +319,7 @@ public final class VectorBinarySet extends VectorBinaryOperator {
         }
         for (Attribute label : tsIdentity) {
             if (PromqlLabels.isMetadataLabel(label) == false) {
-                groupings.add(UnresolvedPromqlAttribute.of(source, label));
+                groupings.add(UnresolvedPromqlLabelRef.of(source, label));
             }
         }
         var order = new Order(source, branchAttr, Order.OrderDirection.ASC, Order.NullsPosition.LAST);

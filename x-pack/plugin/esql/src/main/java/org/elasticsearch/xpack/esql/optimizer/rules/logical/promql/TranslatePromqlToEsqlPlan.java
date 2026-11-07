@@ -29,7 +29,7 @@ import org.elasticsearch.xpack.esql.plan.logical.promql.PromqlPlan;
  * Mechanism: a {@code TranslationContext} per command; recursive descent via {@link PromqlPlan#translate} where every
  * PromQL node produces an {@code IntermediateResult} its parent composes, and {@link PromqlCommand#translate}
  * stitches the top-level forms (single branch, {@code or} union) into finished tables. The plan reads its labels through
- * references that {@link BindPromqlAttributeRefs} binds right after.
+ * references that {@link ResolvePromqlLabelRefs} binds right after.
  */
 public final class TranslatePromqlToEsqlPlan extends AnalyzerRules.ParameterizedAnalyzerRule<PromqlCommand, AnalyzerContext> {
 

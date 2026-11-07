@@ -51,7 +51,7 @@ public final class PromqlLabels {
      * Null when the result has no residual metadata. The output contract already composes child exclusions.
      */
     public static @Nullable Set<String> excluded(LogicalPlan node) {
-        UnresolvedPromqlAttribute metadata = metadataLabel(node.output());
+        UnresolvedPromqlLabelRef metadata = metadataLabel(node.output());
         return metadata == null ? null : metadata.unset();
     }
 

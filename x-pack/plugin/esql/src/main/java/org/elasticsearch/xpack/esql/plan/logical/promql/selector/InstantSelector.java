@@ -18,7 +18,7 @@ import org.elasticsearch.xpack.esql.plan.logical.promql.PlaceholderRelation;
 import org.elasticsearch.xpack.esql.plan.logical.promql.PromqlDataType;
 import org.elasticsearch.xpack.esql.plan.logical.promql.TranslationContext;
 import org.elasticsearch.xpack.esql.plan.logical.promql.TranslationContext.IntermediateResult;
-import org.elasticsearch.xpack.esql.plan.logical.promql.UnresolvedPromqlAttribute;
+import org.elasticsearch.xpack.esql.plan.logical.promql.UnresolvedPromqlLabelRef;
 
 import java.util.List;
 import java.util.Set;
@@ -97,7 +97,7 @@ public final class InstantSelector extends Selector {
     public List<Attribute> output() {
         if (output == null) {
             // returns values grouped per time series
-            output = List.of(UnresolvedPromqlAttribute.metadata(source(), Set.of()));
+            output = List.of(UnresolvedPromqlLabelRef.metadata(source(), Set.of()));
         }
         return output;
     }
