@@ -54,9 +54,9 @@ public final class PromqlLabels {
     }
 
     /** labels container the plan does not promote, or null when every label is promoted. */
-    public static @Nullable UnresolvedPromqlAttribute metadataLabel(List<Attribute> labels) {
+    public static @Nullable UnresolvedPromqlLabelRef metadataLabel(List<Attribute> labels) {
         for (var a : labels) {
-            if (isMetadataLabel(a) && a instanceof UnresolvedPromqlAttribute ua) {
+            if (isMetadataLabel(a) && a instanceof UnresolvedPromqlLabelRef ua) {
                 return ua;
             }
         }
@@ -65,7 +65,7 @@ public final class PromqlLabels {
 
     /** Whether the label is _timeseries metadata */
     public static boolean isMetadataLabel(Attribute label) {
-        return label instanceof UnresolvedPromqlAttribute reference && reference.isMetadata();
+        return label instanceof UnresolvedPromqlLabelRef reference && reference.isMetadata();
     }
 
     /** Column name for metadata after applying unset (e.g. _timeseries$pod after without(pod)). */

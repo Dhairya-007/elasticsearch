@@ -30,27 +30,27 @@ import java.util.Set;
  * which columns the input already carries.
  * <p>
  * A metadata reference's unset is the transform its operator applies to input metadata: labels dropped from the
- * blob (without(...), label_replace destination, arith dropping __name__, ...). BindPromqlAttributeRefs accumulates those into
+ * blob (without(...), label_replace destination, arith dropping __name__, ...). ResolvePromqlLabelRefs accumulates those into
  * the against-source view that names the column. Leaving labels out requires typed {@code _timeseries}
  * ({@code ts_unset}); keyword metadata does not support that.
  */
-public final class UnresolvedPromqlAttribute extends Attribute implements Unresolvable {
+public final class UnresolvedPromqlLabelRef extends Attribute implements Unresolvable {
 
     private final @Nullable Set<String> unset;
 
     /** A reference to the promoted label name. */
-    public static UnresolvedPromqlAttribute label(Source source, String name) {
-        return new UnresolvedPromqlAttribute(source, name, null, null);
+    public static UnresolvedPromqlLabelRef label(Source source, String name) {
+        return new UnresolvedPromqlLabelRef(source, name, null, null);
     }
 
     /** Metadata of the operator's input after applying unset. */
-    public static UnresolvedPromqlAttribute metadata(Source source, Set<String> unset) {
-        return new UnresolvedPromqlAttribute(source, PromqlLabels.metadataLabelName(Set.of()), unset, null);
+    public static UnresolvedPromqlLabelRef metadata(Source source, Set<String> unset) {
+        return new UnresolvedPromqlLabelRef(source, PromqlLabels.metadataLabelName(Set.of()), unset, null);
     }
 
     /** A reference to what an element of a tsIdentity stands for: its metadata, or one of its promoted labels. */
-    public static UnresolvedPromqlAttribute of(Source source, Attribute element) {
-        return element instanceof UnresolvedPromqlAttribute timeSeriesMetadata && timeSeriesMetadata.isMetadata()
+    public static UnresolvedPromqlLabelRef of(Source source, Attribute element) {
+        return element instanceof UnresolvedPromqlLabelRef timeSeriesMetadata && timeSeriesMetadata.isMetadata()
             ? metadata(source, timeSeriesMetadata.unset())
             : label(source, PromqlLabels.labelName(element));
     }
@@ -61,7 +61,7 @@ public final class UnresolvedPromqlAttribute extends Attribute implements Unreso
      */
     public static List<Attribute> tsIdentity(Source source, List<Attribute> tsIdentity) {
         var result = new ArrayList<Attribute>();
-        UnresolvedPromqlAttribute timeSeriesMetadata = PromqlLabels.metadataLabel(tsIdentity);
+        UnresolvedPromqlLabelRef timeSeriesMetadata = PromqlLabels.metadataLabel(tsIdentity);
         if (timeSeriesMetadata != null) {
             result.add(of(source, timeSeriesMetadata));
         }
@@ -73,7 +73,7 @@ public final class UnresolvedPromqlAttribute extends Attribute implements Unreso
         return result;
     }
 
-    public UnresolvedPromqlAttribute(Source source, String name, @Nullable Set<String> unset, @Nullable NameId id) {
+    public UnresolvedPromqlLabelRef(Source source, String name, @Nullable Set<String> unset, @Nullable NameId id) {
         super(source, null, name, id);
         this.unset = unset == null ? null : Collections.unmodifiableSet(new LinkedHashSet<>(unset));
     }
@@ -91,13 +91,13 @@ public final class UnresolvedPromqlAttribute extends Attribute implements Unreso
     }
 
     /** Traced form: unset absolute against the source series, named via metadataLabelName. */
-    public UnresolvedPromqlAttribute againstSource(Set<String> unset) {
+    public UnresolvedPromqlLabelRef againstSource(Set<String> unset) {
         assert isMetadata() : "only metadata leaves labels out [" + name() + "]";
-        return new UnresolvedPromqlAttribute(source(), PromqlLabels.metadataLabelName(unset), unset, id());
+        return new UnresolvedPromqlLabelRef(source(), PromqlLabels.metadataLabelName(unset), unset, id());
     }
 
     /** True when both read the same column. */
-    public boolean reads(UnresolvedPromqlAttribute other) {
+    public boolean reads(UnresolvedPromqlLabelRef other) {
         return name().equals(other.name()) && Objects.equals(unset, other.unset);
     }
 
@@ -117,8 +117,8 @@ public final class UnresolvedPromqlAttribute extends Attribute implements Unreso
     }
 
     @Override
-    protected NodeInfo<UnresolvedPromqlAttribute> info() {
-        return NodeInfo.create(this, UnresolvedPromqlAttribute::new, name(), unset, id());
+    protected NodeInfo<UnresolvedPromqlLabelRef> info() {
+        return NodeInfo.create(this, UnresolvedPromqlLabelRef::new, name(), unset, id());
     }
 
     @Override
@@ -131,7 +131,7 @@ public final class UnresolvedPromqlAttribute extends Attribute implements Unreso
         NameId id,
         boolean synthetic
     ) {
-        return new UnresolvedPromqlAttribute(source, name, unset, id);
+        return new UnresolvedPromqlLabelRef(source, name, unset, id);
     }
 
     @Override
@@ -166,7 +166,7 @@ public final class UnresolvedPromqlAttribute extends Attribute implements Unreso
 
     @Override
     protected boolean innerEquals(Object o, boolean ignoreIds) {
-        UnresolvedPromqlAttribute other = (UnresolvedPromqlAttribute) o;
+        UnresolvedPromqlLabelRef other = (UnresolvedPromqlLabelRef) o;
         return super.innerEquals(o, ignoreIds) && Objects.equals(unset, other.unset);
     }
 }

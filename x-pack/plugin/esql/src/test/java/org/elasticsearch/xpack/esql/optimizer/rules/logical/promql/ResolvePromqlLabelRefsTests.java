@@ -18,7 +18,7 @@ import org.elasticsearch.xpack.esql.plan.logical.EsRelation;
 import org.elasticsearch.xpack.esql.plan.logical.Eval;
 import org.elasticsearch.xpack.esql.plan.logical.LogicalPlan;
 import org.elasticsearch.xpack.esql.plan.logical.Project;
-import org.elasticsearch.xpack.esql.plan.logical.promql.UnresolvedPromqlAttribute;
+import org.elasticsearch.xpack.esql.plan.logical.promql.UnresolvedPromqlLabelRef;
 
 import java.util.List;
 import java.util.Set;
@@ -29,7 +29,7 @@ import static org.elasticsearch.xpack.esql.EsqlTestUtils.as;
  * Tracing names metadata after what it leaves out of the source's series. Plan-level binding is covered by the PromQL plan
  * and golden tests.
  */
-public class BindPromqlAttributeRefsTests extends ESTestCase {
+public class ResolvePromqlLabelRefsTests extends ESTestCase {
 
     /** An Eval stating metadata names the metadata above it after everything it leaves out of the source's series. */
     public void testStatementNamesMetadataAbove() {
@@ -37,7 +37,7 @@ public class BindPromqlAttributeRefsTests extends ESTestCase {
         Alias derived = new Alias(Source.EMPTY, "dst", Literal.keyword(Source.EMPTY, "value"));
         LogicalPlan eval = new Eval(Source.EMPTY, relation, List.of(derived, statement(Set.of("dst"))));
 
-        Project project = as(BindPromqlAttributeRefs.trace(read(eval)), Project.class);
+        Project project = as(ResolvePromqlLabelRefs.trace(read(eval)), Project.class);
         Eval rest = as(project.child(), Eval.class);
         assertEquals(List.of(derived), rest.fields());
         assertSame(relation, rest.child());
@@ -49,13 +49,13 @@ public class BindPromqlAttributeRefsTests extends ESTestCase {
         EsRelation relation = EsqlTestUtils.relation(IndexMode.TIME_SERIES);
         LogicalPlan eval = new Eval(Source.EMPTY, relation, List.of(statement(Set.of("pod")), statement(Set.of("dst"))));
 
-        Project project = as(BindPromqlAttributeRefs.trace(read(eval)), Project.class);
+        Project project = as(ResolvePromqlLabelRefs.trace(read(eval)), Project.class);
         assertSame(relation, project.child());
         assertRead(project, Set.of("pod", "dst"), "_timeseries$dst$pod");
     }
 
     private static Alias statement(Set<String> unset) {
-        return new Alias(Source.EMPTY, MetadataAttribute.TIMESERIES, UnresolvedPromqlAttribute.metadata(Source.EMPTY, unset));
+        return new Alias(Source.EMPTY, MetadataAttribute.TIMESERIES, UnresolvedPromqlLabelRef.metadata(Source.EMPTY, unset));
     }
 
     /** A projection reading the metadata of {@code child} as is. */
@@ -65,7 +65,7 @@ public class BindPromqlAttributeRefsTests extends ESTestCase {
 
     private static void assertRead(Project project, Set<String> unset, String name) {
         Alias projected = as(project.projections().getFirst(), Alias.class);
-        UnresolvedPromqlAttribute ref = as(projected.child(), UnresolvedPromqlAttribute.class);
+        UnresolvedPromqlLabelRef ref = as(projected.child(), UnresolvedPromqlLabelRef.class);
         assertEquals(unset, ref.unset());
         assertEquals(name, ref.name());
     }
