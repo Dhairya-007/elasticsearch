@@ -77,6 +77,7 @@ import org.elasticsearch.xpack.esql.core.expression.Attribute;
 import org.elasticsearch.xpack.esql.core.expression.Expression;
 import org.elasticsearch.xpack.esql.core.expression.FieldAttribute;
 import org.elasticsearch.xpack.esql.core.expression.FoldContext;
+import org.elasticsearch.xpack.esql.core.expression.ReferenceAttribute;
 import org.elasticsearch.xpack.esql.core.expression.TemporalityAttribute;
 import org.elasticsearch.xpack.esql.core.expression.TimeSeriesMetadataAttribute;
 import org.elasticsearch.xpack.esql.core.type.CompactMultiTypeEsField;
@@ -351,7 +352,7 @@ public class EsPhysicalOperationProviders extends AbstractPhysicalOperationProvi
             );
             if (attr instanceof TimeSeriesMetadataAttribute && attr.dataType() == DataType.TIMESERIES_DATA_TYPE) {
                 // Typed metadata is the keyword source form of the dimensions, converted as it is read: the loader yields keyword
-                var cast = new ToTimeSeries(attr.source(), attr.withDataType(DataType.KEYWORD));
+                var cast = new ToTimeSeries(attr.source(), new ReferenceAttribute(attr.source(), attr.name(), DataType.KEYWORD));
                 return ValuesSourceReaderOperator.loadAndConvert(blockLoader, new TypeConverter(cast));
             }
             return ValuesSourceReaderOperator.load(blockLoader);
