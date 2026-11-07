@@ -7,20 +7,27 @@
 
 package org.elasticsearch.xpack.esql.expression.function.scalar.timeseries;
 
+import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.common.io.stream.StreamInput;
-import org.elasticsearch.compute.expression.ExpressionEvaluator;
+import org.elasticsearch.compute.ann.ConvertEvaluator;
+import org.elasticsearch.compute.ann.Fixed;
+import org.elasticsearch.compute.operator.BreakingBytesRefBuilder;
 import org.elasticsearch.xpack.esql.core.expression.Expression;
-import org.elasticsearch.xpack.esql.core.expression.TypeResolutions.ParamOrdinal;
 import org.elasticsearch.xpack.esql.core.tree.NodeInfo;
 import org.elasticsearch.xpack.esql.core.tree.Source;
 import org.elasticsearch.xpack.esql.core.type.DataType;
-import org.elasticsearch.xpack.esql.expression.function.scalar.UnaryScalarFunction;
+import org.elasticsearch.xpack.esql.core.util.TimeSeriesMetadata;
+import org.elasticsearch.xpack.esql.expression.function.scalar.convert.AbstractConvertFunction;
+import org.elasticsearch.xpack.esql.plan.logical.promql.PromqlLabels;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.List;
+import java.util.Map;
 
-import static org.elasticsearch.xpack.esql.core.expression.TypeResolutions.isType;
+import static org.elasticsearch.compute.ann.Fixed.Scope.THREAD_LOCAL;
+import static org.elasticsearch.xpack.esql.core.type.DataType.KEYWORD;
 
 /**
  * Casts the keyword {@code _timeseries} - the source of a series' dimensions, as nodes without typed metadata read it - to
@@ -30,11 +37,20 @@ import static org.elasticsearch.xpack.esql.core.expression.TypeResolutions.isTyp
  * <p>
  * Internal: PromQL resolution places it on the coordinator, above every aggregate, where the typed type is supported.
  */
-public final class ToTimeSeries extends UnaryScalarFunction {
+public final class ToTimeSeries extends AbstractConvertFunction {
     public static final NamedWriteableRegistry.Entry ENTRY = new NamedWriteableRegistry.Entry(
         Expression.class,
         "ToTimeSeries",
         ToTimeSeries::new
+    );
+
+    private static final Map<DataType, BuildFactory> EVALUATORS = Map.of(
+        KEYWORD,
+        (source, field) -> new ToTimeSeriesFromKeywordEvaluator.Factory(
+            source,
+            field,
+            context -> new BreakingBytesRefBuilder(context.breaker(), "to_timeseries")
+        )
     );
 
     public ToTimeSeries(Source source, Expression field) {
@@ -51,11 +67,8 @@ public final class ToTimeSeries extends UnaryScalarFunction {
     }
 
     @Override
-    protected TypeResolution resolveType() {
-        if (childrenResolved() == false) {
-            return new TypeResolution("Unresolved children");
-        }
-        return isType(field(), type -> type == DataType.KEYWORD, sourceText(), ParamOrdinal.DEFAULT, "keyword");
+    protected Map<DataType, BuildFactory> factories() {
+        return EVALUATORS;
     }
 
     @Override
@@ -68,9 +81,16 @@ public final class ToTimeSeries extends UnaryScalarFunction {
         return false;
     }
 
-    @Override
-    public ExpressionEvaluator.Factory toEvaluator(ToEvaluator toEvaluator) {
-        return TimeSeriesEvaluator.fromKeywordFactory(toEvaluator.apply(field()));
+    /** The source form of a series' dimensions, encoded as typed metadata in the breaker-accounted {@code scratch}. */
+    @ConvertEvaluator(extraName = "FromKeyword")
+    static BytesRef fromKeyword(BytesRef in, @Fixed(includeInToString = false, scope = THREAD_LOCAL) BreakingBytesRefBuilder scratch) {
+        scratch.clear();
+        try {
+            TimeSeriesMetadata.readSource(in, PromqlLabels::labelName).writeTo(new TimeSeriesMetadataOutputStream(scratch));
+        } catch (IOException e) {
+            throw new UncheckedIOException("Invalid time-series metadata", e);
+        }
+        return scratch.bytesRefView();
     }
 
     @Override
