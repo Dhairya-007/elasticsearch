@@ -300,9 +300,9 @@ public final class MetadataManipulationFunction extends PromqlFunctionCall {
             return false;
         }
         String name = PromqlLabels.labelName(destination().name());
-        UnresolvedPromqlAttribute metadata = null;
+        UnresolvedPromqlLabelRef metadata = null;
         for (Attribute attribute : child().output()) {
-            if (PromqlLabels.isMetadataLabel(attribute) && attribute instanceof UnresolvedPromqlAttribute view) {
+            if (PromqlLabels.isMetadataLabel(attribute) && attribute instanceof UnresolvedPromqlLabelRef view) {
                 metadata = view;
             } else if (PromqlLabels.labelName(attribute).equals(name)) {
                 return true;

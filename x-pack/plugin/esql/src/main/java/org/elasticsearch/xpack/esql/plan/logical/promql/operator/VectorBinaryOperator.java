@@ -380,7 +380,7 @@ public abstract sealed class VectorBinaryOperator extends BinaryPlan implements 
      * merge the series sharing them into one multivalued value and compare that instead.
      */
     private List<Attribute> seriesIdentity(LogicalPlan operand) {
-        return UnresolvedPromqlAttribute.tsIdentity(source(), operand.output());
+        return UnresolvedPromqlLabelRef.tsIdentity(source(), operand.output());
     }
 
     /**
@@ -787,7 +787,7 @@ public abstract sealed class VectorBinaryOperator extends BinaryPlan implements 
         if (namedLabels(operand).contains(label)) {
             return true;
         }
-        UnresolvedPromqlAttribute metadata = PromqlLabels.metadataLabel(operand.output());
+        UnresolvedPromqlLabelRef metadata = PromqlLabels.metadataLabel(operand.output());
         return metadata != null && metadata.unset().contains(label) == false;
     }
 

@@ -348,7 +348,7 @@ public record TranslationContext(
     public LogicalPlan uniqueSeries(Source source, LogicalPlan plan, Attribute step, List<Attribute> output) {
         List<Attribute> labelSet = new ArrayList<>();
         labelSet.add(step);
-        labelSet.addAll(UnresolvedPromqlAttribute.tsIdentity(source, output));
+        labelSet.addAll(UnresolvedPromqlLabelRef.tsIdentity(source, output));
         // Binary, not keyword: a sort the optimizer pushes below the result's projection carries it along. Named apart from
         // a join key packed below.
         Attribute packed = PackDims.newPackedAttribute(
