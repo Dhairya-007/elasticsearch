@@ -694,7 +694,7 @@ public abstract sealed class VectorBinaryOperator extends BinaryPlan implements 
         boolean probeRight = match.grouping() == Joining.RIGHT;
         IntermediateResult probe = probeRight ? right : left;
         IntermediateResult build = reidentify(context, probeRight ? left : right);
-        // Layout pin runs inside emitInput *after* PackDims so join-key UnresolvedPromqlAttributes resolve into the
+        // Layout pin runs inside emitInput *after* PackDims so join-key UnresolvedPromqlLabelRefs resolve into the
         // collapse before any pin Project (resolveProject does not forward needs - pinning first null-filled keys).
         List<String> keyLabels = keyLabels();
         Input probeInput = emitInput(context, new Operand(probe, probeRight ? right() : left()), keyLabels);
