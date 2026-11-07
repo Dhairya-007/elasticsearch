@@ -33,8 +33,8 @@ import org.elasticsearch.xpack.esql.expression.function.aggregate.Present;
 import org.elasticsearch.xpack.esql.expression.function.aggregate.Sum;
 import org.elasticsearch.xpack.esql.expression.function.scalar.conditional.Case;
 import org.elasticsearch.xpack.esql.expression.function.scalar.convert.ToDouble;
-import org.elasticsearch.xpack.esql.expression.function.scalar.timeseries.TimeSeriesFromKeyword;
 import org.elasticsearch.xpack.esql.expression.function.scalar.timeseries.TimeSeriesUnset;
+import org.elasticsearch.xpack.esql.expression.function.scalar.timeseries.ToTimeSeries;
 import org.elasticsearch.xpack.esql.expression.predicate.operator.arithmetic.Add;
 import org.elasticsearch.xpack.esql.expression.predicate.operator.arithmetic.Div;
 import org.elasticsearch.xpack.esql.expression.predicate.operator.arithmetic.Mul;
@@ -892,7 +892,7 @@ public class PromqlPlanBinaryOperatorTests extends AbstractPromqlPlanOptimizerTe
                 .stream()
                 .anyMatch(
                     e -> e.anyMatch(
-                        x -> x instanceof TimeSeriesFromKeyword from
+                        x -> x instanceof ToTimeSeries from
                             && "{}".equals(BytesRefs.toString(from.children().getFirst().fold(FoldContext.small())))
                     )
                 )

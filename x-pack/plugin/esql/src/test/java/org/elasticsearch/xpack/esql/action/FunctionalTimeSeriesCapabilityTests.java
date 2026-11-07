@@ -18,7 +18,7 @@ import org.elasticsearch.xpack.esql.core.expression.Expression;
 import org.elasticsearch.xpack.esql.core.type.DataType;
 import org.elasticsearch.xpack.esql.core.type.EsField;
 import org.elasticsearch.xpack.esql.expression.function.EsqlFunctionRegistry;
-import org.elasticsearch.xpack.esql.expression.function.scalar.timeseries.TimeSeriesFunction;
+import org.elasticsearch.xpack.esql.expression.function.scalar.timeseries.AbstractTimeSeriesFunction;
 import org.elasticsearch.xpack.esql.index.EsIndex;
 import org.elasticsearch.xpack.esql.index.IndexProperties;
 import org.elasticsearch.xpack.esql.plan.logical.EsRelation;
@@ -53,7 +53,7 @@ public class FunctionalTimeSeriesCapabilityTests extends ESTestCase {
         for (String expression : KEYWORD_SHAPES) {
             var plan = analyzer.query("PROMQL index=k8s step=1h result=(" + expression + ") | LIMIT 10");
             assertTrue(expression, plan.resolved());
-            plan.forEachExpressionDown(Expression.class, e -> assertFalse(expression, e instanceof TimeSeriesFunction));
+            plan.forEachExpressionDown(Expression.class, e -> assertFalse(expression, e instanceof AbstractTimeSeriesFunction));
             plan.forEachDown(
                 EsRelation.class,
                 relation -> relation.output().forEach(a -> assertNotEquals(expression, DataType.TIMESERIES_DATA_TYPE, a.dataType()))
@@ -70,7 +70,7 @@ public class FunctionalTimeSeriesCapabilityTests extends ESTestCase {
             assertTrue(expression, plan.resolved());
             plan.forEachExpressionDown(Expression.class, e -> {
                 assertNotEquals(expression, DataType.TIMESERIES_DATA_TYPE, e.dataType());
-                assertFalse(expression, e instanceof TimeSeriesFunction);
+                assertFalse(expression, e instanceof AbstractTimeSeriesFunction);
             });
         }
     }
